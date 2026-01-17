@@ -1,0 +1,727 @@
+'use client';
+
+import { useEffect, useState, useMemo } from 'react';
+import { DashboardLayout } from '@/components/layout';
+import { Table, Modal, ConfirmDialog } from '@/components/ui';
+import { useAuth } from '@/context/AuthContext';
+import { usersApi, departmentsApi, rolesApi, companiesApi } from '@/services/api';
+import { Plus, Pencil, Trash2, Shield, X } from 'lucide-react';
+import type { User, Department, Company } from '@/types';
+
+interface RoleOption {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+export default function UsersPage() {
+  const { hasRole, user: currentUser } = useAuth();
+  const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    firstname: '',
+    lastname: '',
+    password: '',
+    companyId: 0,
+    departmentId: 0,
+    roleSlug: 'user',
+  });
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+
+  const isSuperAdmin = hasRole('super_admin');
+  const isCompanyAdmin = hasRole('company_admin');
+  const canManage = hasRole(['super_admin', 'company_admin']);
+  const canAssignRoles = hasRole(['super_admin', 'company_admin']);
+
+  // Get current user's company ID (for company_admin)
+  // Option C: Use user.company directly as single source of truth
+  const currentUserCompanyId = useMemo(() => {
+    // First check user.company (Option C - single source of truth)
+    if (currentUser?.company && typeof currentUser.company === 'object') {
+      return (currentUser.company as Company).id;
+    }
+    // Fallback to department.company for backwards compatibility
+    if (currentUser?.department && typeof currentUser.department === 'object') {
+      return (currentUser.department as Department).company?.id;
+    }
+    return undefined;
+  }, [currentUser]);
+
+  // Filter departments based on selected company (for super_admin) or current user's company (for company_admin)
+  const filteredDepartments = useMemo(() => {
+    if (isSuperAdmin) {
+      // Super admin: filter by selected company
+      if (formData.companyId) {
+        return departments.filter((d) => d.company?.id === formData.companyId);
+      }
+      return departments;
+    } else if (isCompanyAdmin && currentUserCompanyId) {
+      // Company admin: only show departments from their company
+      return departments.filter((d) => d.company?.id === currentUserCompanyId);
+    }
+    return departments;
+  }, [departments, formData.companyId, isSuperAdmin, isCompanyAdmin, currentUserCompanyId]);
+
+  // Filter roles based on current user's role (case-insensitive)
+  const availableRoles = useMemo(() => {
+    if (isSuperAdmin) {
+      // Super admin can create company_admin, manager, user (not super_admin - only one exists)
+      return roles.filter((r) =>
+        ['company_admin', 'manager', 'user'].includes(r.slug?.toLowerCase())
+      );
+    } else if (isCompanyAdmin) {
+      // Company admin can only create manager and user roles
+      return roles.filter((r) =>
+        ['manager', 'user'].includes(r.slug?.toLowerCase())
+      );
+    }
+    return roles.filter((r) => r.slug?.toLowerCase() === 'user');
+  }, [roles, isSuperAdmin, isCompanyAdmin]);
+
+  // Determine if company selection should be shown (case-insensitive)
+  const showCompanySelect = useMemo(() => {
+    // Only super_admin can select company
+    // Company is required for company_admin, manager, user roles
+    if (!isSuperAdmin) return false;
+    return ['company_admin', 'manager', 'user'].includes(formData.roleSlug?.toLowerCase());
+  }, [isSuperAdmin, formData.roleSlug]);
+
+  // Determine if department selection should be shown (case-insensitive)
+  const showDepartmentSelect = useMemo(() => {
+    // Department is required for manager and user roles
+    return ['manager', 'user'].includes(formData.roleSlug?.toLowerCase());
+  }, [formData.roleSlug]);
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reset department when company changes
+  useEffect(() => {
+    if (formData.companyId && formData.departmentId) {
+      const dept = departments.find((d) => d.id === formData.departmentId);
+      if (dept && dept.company?.id !== formData.companyId) {
+        setFormData((prev) => ({ ...prev, departmentId: 0 }));
+      }
+    }
+  }, [formData.companyId, formData.departmentId, departments]);
+
+  const fetchData = async () => {
+    try {
+      // Only super_admin and company_admin can access companies endpoint
+      const canAccessCompanies = isSuperAdmin || isCompanyAdmin;
+
+      // Fetch data based on role permissions
+      const [usersRes, deptsRes, rolesRes] = await Promise.all([
+        usersApi.getAll(),
+        departmentsApi.getAll(),
+        rolesApi.getAll(),
+      ]);
+
+      setUsers(usersRes.data.data || []);
+      setDepartments(deptsRes.data.data || []);
+      setRoles(rolesRes.data.data || []);
+
+      // Fetch companies separately only if user has access
+      if (canAccessCompanies) {
+        try {
+          const companiesRes = await companiesApi.getAll();
+          setCompanies(companiesRes.data.data || []);
+        } catch (err) {
+          console.error('Failed to fetch companies:', err);
+          setCompanies([]);
+        }
+      } else {
+        setCompanies([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openCreateModal = () => {
+    setSelectedUser(null);
+    const defaultRole = isCompanyAdmin ? 'user' : 'user';
+    setFormData({
+      email: '',
+      firstname: '',
+      lastname: '',
+      password: '',
+      companyId: currentUserCompanyId || 0,
+      departmentId: 0,
+      roleSlug: defaultRole,
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setFormData({
+      email: user.email,
+      firstname: user.firstname || '',
+      lastname: user.lastname || '',
+      password: '',
+      // Option C: Use user.company directly as single source of truth
+      companyId: user.company?.id || user.department?.company?.id || 0,
+      departmentId: user.department?.id || 0,
+      roleSlug: '',
+    });
+    setIsModalOpen(true);
+  };
+
+  const openRoleModal = (user: User) => {
+    setSelectedUser(user);
+    setSelectedRoles([]); // Start with empty selection for adding new roles
+    setIsRoleModalOpen(true);
+  };
+
+  const openDeleteDialog = (user: User) => {
+    setSelectedUser(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      if (selectedUser) {
+        const updateData: Partial<User> & { password?: string } = {
+          firstname: formData.firstname,
+          lastname: formData.lastname,
+        };
+        if (formData.password) {
+          updateData.password = formData.password;
+        }
+        await usersApi.update(selectedUser.id, updateData);
+      } else {
+        // For company_admin: send companyId, no departmentId
+        // For manager/user: send departmentId
+        const isCompanyAdminRole = formData.roleSlug?.toLowerCase() === 'company_admin';
+        await usersApi.create({
+          email: formData.email,
+          firstname: formData.firstname,
+          lastname: formData.lastname,
+          password: formData.password,
+          departmentId: showDepartmentSelect ? formData.departmentId : undefined,
+          companyId: isCompanyAdminRole && formData.companyId ? formData.companyId : undefined,
+          roleSlug: formData.roleSlug,
+        });
+      }
+      setIsModalOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to save user:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAssignRoles = async () => {
+    if (!selectedUser || selectedRoles.length === 0) return;
+    setIsSubmitting(true);
+
+    try {
+      // Get current secondary roles
+      const currentSecondaryRoles = selectedUser.roles
+        ?.map((r) => (typeof r === 'string' ? r : r.slug))
+        .filter((slug) => slug?.toLowerCase() !== selectedUser.role?.slug?.toLowerCase()) || [];
+
+      // Combine existing secondary roles with new selections (remove duplicates)
+      const allRoles = Array.from(new Set([...currentSecondaryRoles, ...selectedRoles]));
+
+      await usersApi.assignRoles(selectedUser.id, allRoles);
+      setIsRoleModalOpen(false);
+      setSelectedRoles([]);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to assign roles:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRemoveRole = async (roleSlug: string) => {
+    if (!selectedUser) return;
+    setIsSubmitting(true);
+
+    try {
+      await usersApi.removeRole(selectedUser.id, roleSlug);
+      fetchData();
+      // Update selectedUser to reflect the change
+      setSelectedUser((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          roles: prev.roles?.filter((r) => {
+            const slug = typeof r === 'string' ? r : r.slug;
+            return slug?.toLowerCase() !== roleSlug.toLowerCase();
+          }),
+        };
+      });
+    } catch (error) {
+      console.error('Failed to remove role:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedUser) return;
+    setIsSubmitting(true);
+
+    try {
+      await usersApi.delete(selectedUser.id);
+      setIsDeleteDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const getRoleBadge = (user: User) => {
+    const userRoles = user.roles || (user.role ? [user.role] : []);
+    if (userRoles.length === 0) return <span className="badge bg-slate-100 text-slate-600">No role</span>;
+
+    return (
+      <div className="flex flex-wrap gap-1">
+        {userRoles.slice(0, 2).map((role, index) => {
+          const slug = typeof role === 'string' ? role : role.slug;
+          const colorClass =
+            slug === 'super_admin'
+              ? 'badge-danger'
+              : slug === 'company_admin'
+              ? 'badge-warning'
+              : slug === 'manager'
+              ? 'badge-primary'
+              : 'badge-success';
+          return (
+            <span key={index} className={`badge ${colorClass}`}>
+              {slug.replace('_', ' ')}
+            </span>
+          );
+        })}
+        {userRoles.length > 2 && (
+          <span className="badge bg-slate-100 text-slate-600">+{userRoles.length - 2}</span>
+        )}
+      </div>
+    );
+  };
+
+  const columns = [
+    { key: 'id', header: 'ID', sortable: true },
+    { key: 'email', header: 'Email', sortable: true },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (user: User) => {
+        const fullName = [user.firstname, user.lastname].filter(Boolean).join(' ');
+        return fullName || '-';
+      },
+    },
+    {
+      key: 'department',
+      header: 'Department',
+      render: (user: User) => user.department?.name || '-',
+    },
+    {
+      key: 'company',
+      header: 'Company',
+      // Option C: Prioritize user.company as single source of truth
+      render: (user: User) => user.company?.name || user.department?.company?.name || '-',
+    },
+    {
+      key: 'roles',
+      header: 'Roles',
+      render: getRoleBadge,
+    },
+    ...(canManage
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (user: User) => (
+              <div className="flex items-center gap-2">
+                {canAssignRoles && (
+                  <button
+                    onClick={() => openRoleModal(user)}
+                    className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
+                    title="Manage Roles"
+                  >
+                    <Shield className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => openEditModal(user)}
+                  className="p-2 text-slate-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                  title="Edit"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => openDeleteDialog(user)}
+                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <DashboardLayout title="Users">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Users</h2>
+          <p className="text-slate-500 dark:text-dark-muted mt-1">
+            Manage organization users
+          </p>
+        </div>
+        {canManage && (
+          <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            Add User
+          </button>
+        )}
+      </div>
+
+      <Table
+        columns={columns}
+        data={users}
+        keyExtractor={(user) => user.id}
+        isLoading={isLoading}
+        emptyMessage="No users found"
+      />
+
+      {/* Create/Edit Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={selectedUser ? 'Edit User' : 'Create User'}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {!selectedUser && (
+            <div>
+              <label className="label">Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="input"
+                placeholder="Enter email"
+                required
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="label">First Name</label>
+            <input
+              type="text"
+              value={formData.firstname}
+              onChange={(e) => setFormData({ ...formData, firstname: e.target.value })}
+              className="input"
+              placeholder="Enter first name"
+            />
+          </div>
+
+          <div>
+            <label className="label">Last Name</label>
+            <input
+              type="text"
+              value={formData.lastname}
+              onChange={(e) => setFormData({ ...formData, lastname: e.target.value })}
+              className="input"
+              placeholder="Enter last name"
+            />
+          </div>
+
+          <div>
+            <label className="label">{selectedUser ? 'New Password (leave blank to keep current)' : 'Password'}</label>
+            <input
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="input"
+              placeholder="Enter password"
+              required={!selectedUser}
+            />
+          </div>
+
+          {!selectedUser && (
+            <>
+              {/* Role Selection */}
+              <div>
+                <label className="label">Role</label>
+                <select
+                  value={formData.roleSlug}
+                  onChange={(e) => setFormData({ ...formData, roleSlug: e.target.value, companyId: 0, departmentId: 0 })}
+                  className="input"
+                  required
+                >
+                  <option value="">Select a role</option>
+                  {availableRoles.map((role) => (
+                    <option key={role.id} value={role.slug}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Company Selection - Only for super_admin and certain roles */}
+              {showCompanySelect && (
+                <div>
+                  <label className="label">Company</label>
+                  <select
+                    value={formData.companyId}
+                    onChange={(e) => setFormData({ ...formData, companyId: Number(e.target.value), departmentId: 0 })}
+                    className="input"
+                    required
+                  >
+                    <option value="">Select a company</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Department Selection - For manager and user roles */}
+              {showDepartmentSelect && (
+                <div>
+                  <label className="label">Department</label>
+                  <select
+                    value={formData.departmentId}
+                    onChange={(e) => setFormData({ ...formData, departmentId: Number(e.target.value) })}
+                    className="input"
+                    required
+                    disabled={isSuperAdmin && !formData.companyId}
+                  >
+                    <option value="">
+                      {isSuperAdmin && !formData.companyId
+                        ? 'Select a company first'
+                        : 'Select a department'}
+                    </option>
+                    {filteredDepartments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name} {isSuperAdmin && dept.company ? `(${dept.company.name})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="btn-secondary flex-1"
+            >
+              Cancel
+            </button>
+            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">
+              {isSubmitting ? 'Saving...' : selectedUser ? 'Update' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Role Assignment Modal */}
+      <Modal
+        isOpen={isRoleModalOpen}
+        onClose={() => setIsRoleModalOpen(false)}
+        title="Manage Roles"
+      >
+        <div className="space-y-4">
+          <p className="text-slate-600 dark:text-dark-muted">
+            Manage roles for <strong>{selectedUser?.email}</strong>
+          </p>
+
+          {/* Primary Role (read-only) */}
+          {selectedUser?.role && (
+            <div>
+              <label className="label text-xs uppercase tracking-wide">Primary Role</label>
+              <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                <span className="badge badge-primary">{selectedUser.role.name || selectedUser.role.slug}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Current Secondary Roles (removable) */}
+          {(() => {
+            const secondaryRoles = selectedUser?.roles?.filter((r) => {
+              const slug = typeof r === 'string' ? r : r.slug;
+              return slug?.toLowerCase() !== selectedUser?.role?.slug?.toLowerCase();
+            }) || [];
+
+            // Filter: company_admin cannot remove super_admin or company_admin
+            const removableRoles = secondaryRoles.filter((r) => {
+              const slug = typeof r === 'string' ? r : r.slug;
+              if (isCompanyAdmin && ['super_admin', 'company_admin'].includes(slug?.toLowerCase() || '')) {
+                return false;
+              }
+              return true;
+            });
+
+            if (secondaryRoles.length === 0) return null;
+
+            return (
+              <div>
+                <label className="label text-xs uppercase tracking-wide">Current Secondary Roles</label>
+                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                  {secondaryRoles.map((r) => {
+                    const slug = typeof r === 'string' ? r : r.slug;
+                    const name = typeof r === 'string' ? r : r.name;
+                    const canRemove = removableRoles.some((rr) => {
+                      const rrSlug = typeof rr === 'string' ? rr : rr.slug;
+                      return rrSlug === slug;
+                    });
+
+                    return (
+                      <span
+                        key={slug}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+                          slug === 'company_admin'
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+                            : slug === 'manager'
+                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                            : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                        }`}
+                      >
+                        {name}
+                        {canRemove && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRole(slug)}
+                            disabled={isSubmitting}
+                            className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5 transition-colors"
+                            title={`Remove ${name} role`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Add New Secondary Roles */}
+          {(() => {
+            const currentRoleSlugs = selectedUser?.roles?.map((r) =>
+              (typeof r === 'string' ? r : r.slug)?.toLowerCase()
+            ) || [];
+            const primaryRoleSlug = selectedUser?.role?.slug?.toLowerCase();
+
+            const availableToAdd = roles.filter((role) => {
+              const slug = role.slug?.toLowerCase();
+              // super_admin cannot be assigned as secondary role
+              if (slug === 'super_admin') return false;
+              // Filter out primary role
+              if (primaryRoleSlug === slug) return false;
+              // Filter out already assigned secondary roles
+              if (currentRoleSlugs.includes(slug || '')) return false;
+              // company_admin cannot assign company_admin
+              if (isCompanyAdmin && slug === 'company_admin') return false;
+              return true;
+            });
+
+            if (availableToAdd.length === 0) {
+              return (
+                <div>
+                  <label className="label text-xs uppercase tracking-wide">Add Secondary Roles</label>
+                  <p className="text-sm text-slate-500 dark:text-dark-muted p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                    No additional roles available to assign.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div>
+                <label className="label text-xs uppercase tracking-wide">Add Secondary Roles</label>
+                <div className="space-y-2">
+                  {availableToAdd.map((role) => (
+                    <label
+                      key={role.id}
+                      className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedRoles.includes(role.slug)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedRoles([...selectedRoles, role.slug]);
+                          } else {
+                            setSelectedRoles(selectedRoles.filter((r) => r !== role.slug));
+                          }
+                        }}
+                        className="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500"
+                      />
+                      <span className="text-slate-700 dark:text-dark-text">{role.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setIsRoleModalOpen(false)}
+              className="btn-secondary flex-1"
+            >
+              Close
+            </button>
+            {selectedRoles.length > 0 && (
+              <button
+                onClick={handleAssignRoles}
+                disabled={isSubmitting}
+                className="btn-primary flex-1"
+              >
+                {isSubmitting ? 'Adding...' : `Add ${selectedRoles.length} Role${selectedRoles.length > 1 ? 's' : ''}`}
+              </button>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleDelete}
+        title="Delete User"
+        message={`Are you sure you want to delete "${selectedUser?.email}"? This action cannot be undone.`}
+        confirmText="Delete"
+        isDestructive
+        isLoading={isSubmitting}
+      />
+    </DashboardLayout>
+  );
+}
