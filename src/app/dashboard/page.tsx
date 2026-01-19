@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout';
 import { StatsCard } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
@@ -106,7 +107,7 @@ export default function DashboardPage() {
                   Quick Actions
                 </h3>
                 <div className="space-y-3">
-                  <a
+                  <Link
                     href="/dashboard/companies"
                     className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   >
@@ -114,8 +115,8 @@ export default function DashboardPage() {
                       <Building className="w-5 h-5 text-primary-600" />
                       <span className="text-slate-700 dark:text-dark-text">Manage Companies</span>
                     </div>
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/dashboard/departments"
                     className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   >
@@ -123,8 +124,8 @@ export default function DashboardPage() {
                       <FolderTree className="w-5 h-5 text-green-600" />
                       <span className="text-slate-700 dark:text-dark-text">Manage Departments</span>
                     </div>
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/dashboard/users"
                     className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   >
@@ -132,7 +133,7 @@ export default function DashboardPage() {
                       <Users className="w-5 h-5 text-amber-600" />
                       <span className="text-slate-700 dark:text-dark-text">Manage Users</span>
                     </div>
-                  </a>
+                  </Link>
                 </div>
               </div>
 
@@ -182,7 +183,7 @@ export default function DashboardPage() {
                 Quick Actions
               </h3>
               <div className="space-y-3">
-                <a
+                <Link
                   href="/dashboard/departments"
                   className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
@@ -190,8 +191,8 @@ export default function DashboardPage() {
                     <FolderTree className="w-5 h-5 text-primary-600" />
                     <span className="text-slate-700 dark:text-dark-text">Manage Departments</span>
                   </div>
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/dashboard/users"
                   className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
@@ -199,8 +200,8 @@ export default function DashboardPage() {
                     <Users className="w-5 h-5 text-green-600" />
                     <span className="text-slate-700 dark:text-dark-text">Manage Users</span>
                   </div>
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/dashboard/activity-logs"
                   className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
@@ -208,7 +209,7 @@ export default function DashboardPage() {
                     <Activity className="w-5 h-5 text-amber-600" />
                     <span className="text-slate-700 dark:text-dark-text">View Activity Logs</span>
                   </div>
-                </a>
+                </Link>
               </div>
             </div>
           </>
@@ -230,7 +231,7 @@ export default function DashboardPage() {
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                 Team Management
               </h3>
-              <a
+              <Link
                 href="/dashboard/users"
                 className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
@@ -238,7 +239,7 @@ export default function DashboardPage() {
                   <Users className="w-5 h-5 text-primary-600" />
                   <span className="text-slate-700 dark:text-dark-text">View Team Members</span>
                 </div>
-              </a>
+              </Link>
             </div>
           </>
         );
@@ -255,9 +256,9 @@ export default function DashboardPage() {
             <p className="text-slate-500 dark:text-dark-muted mb-6">
               Manage your profile and preferences from the settings page.
             </p>
-            <a href="/dashboard/settings" className="btn-primary inline-block">
+            <Link href="/dashboard/settings" className="btn-primary inline-block">
               Go to Settings
-            </a>
+            </Link>
           </div>
         );
     }

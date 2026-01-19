@@ -392,7 +392,7 @@ export default function UsersPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Users</h2>
           <p className="text-slate-500 dark:text-dark-muted mt-1">
-            Manage organization users
+            Manage department users
           </p>
         </div>
         {canManage && (
