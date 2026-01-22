@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Table, Modal, ConfirmDialog } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { companiesApi } from '@/services/api';
+import { subscribeToNotifications } from '@/services/socket';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import type { Company } from '@/types';
+import type { Company, NotificationPayload } from '@/types';
 
 export default function CompaniesPage() {
   const { hasRole } = useAuth();
@@ -20,14 +21,11 @@ export default function CompaniesPage() {
     name: '',
     address: '',
   });
+  const [error, setError] = useState<string | null>(null);
 
   const canManage = hasRole('super_admin');
 
-  useEffect(() => {
-    fetchCompanies();
-  }, []);
-
-  const fetchCompanies = async () => {
+  const fetchCompanies = useCallback(async () => {
     try {
       const response = await companiesApi.getAll();
       setCompanies(response.data.data);
@@ -36,7 +34,37 @@ export default function CompaniesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, [fetchCompanies]);
+
+  // Subscribe to real-time notifications for company changes
+  useEffect(() => {
+    const unsubscribe = subscribeToNotifications(
+      (notification: NotificationPayload) => {
+        // Refresh data when company-related events occur
+        const companyEvents = [
+          'company:created',
+          'company:updated',
+          'company:deleted',
+        ];
+
+        if (companyEvents.includes(notification.type)) {
+          console.log(
+            'Real-time update: Refreshing companies data',
+            notification.type
+          );
+          fetchCompanies();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchCompanies]);
 
   const openCreateModal = () => {
     setSelectedCompany(null);
@@ -55,6 +83,7 @@ export default function CompaniesPage() {
 
   const openDeleteDialog = (company: Company) => {
     setSelectedCompany(company);
+    setError(null);
     setIsDeleteDialogOpen(true);
   };
 
@@ -80,20 +109,27 @@ export default function CompaniesPage() {
   const handleDelete = async () => {
     if (!selectedCompany) return;
     setIsSubmitting(true);
+    setError(null);
 
     try {
       await companiesApi.delete(selectedCompany.id);
       setIsDeleteDialogOpen(false);
       fetchCompanies();
-    } catch (error) {
-      console.error('Failed to delete company:', error);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      const message = axiosError.response?.data?.message || 'Failed to delete company';
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const columns = [
-    { key: 'id', header: 'ID', sortable: true },
+    {
+      key: 'rowNumber',
+      header: '#',
+      render: (_company: Company, index: number) => index + 1,
+    },
     { key: 'name', header: 'Name', sortable: true },
     { key: 'address', header: 'Address' },
     ...(canManage
@@ -203,6 +239,7 @@ export default function CompaniesPage() {
         confirmText="Delete"
         isDestructive
         isLoading={isSubmitting}
+        error={error}
       />
     </DashboardLayout>
   );

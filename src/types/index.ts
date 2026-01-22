@@ -4,10 +4,12 @@ export interface User {
   firstname?: string;
   lastname?: string;
   age?: number;
-  role?: Role;
-  roles?: Role[];
+  role?: Role | string;
+  roles?: (Role | string)[];
   department?: Department;
   company?: Company;
+  isActive?: boolean;
+  deactivatedAt?: string;
   createdAt?: string;
   updatedAt?: string;
 }

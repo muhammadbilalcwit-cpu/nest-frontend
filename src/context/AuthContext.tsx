@@ -1,10 +1,17 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import type { User, RoleSlug } from '@/types';
-import { authApi } from '@/services/api';
-import { connectSocket, disconnectSocket } from '@/services/socket';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
+import { useRouter } from "next/navigation";
+import type { User, RoleSlug } from "@/types";
+import { authApi, FORCE_LOGOUT_EVENT, FORBIDDEN_EVENT } from "@/services/api";
+import { connectSocket, disconnectSocket } from "@/services/socket";
 
 interface AuthContextType {
   user: User | null;
@@ -23,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const isLoggingOut = useRef(false);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -38,31 +46,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const logout = useCallback(async () => {
+    // Prevent multiple simultaneous logout calls
+    if (isLoggingOut.current) return;
+    isLoggingOut.current = true;
+
+    try {
+      await authApi.logout();
+    } catch {
+      // Ignore logout errors - server might reject if session already invalid
+    } finally {
+      setUser(null);
+      disconnectSocket();
+      isLoggingOut.current = false;
+      router.push("/login");
+    }
+  }, [router]);
+
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  // Listen for force logout events from axios interceptor
+  useEffect(() => {
+    const handleForceLogout = () => {
+      console.log("Force logout triggered - user session invalid");
+      logout();
+    };
+
+    const onForbidden = () => {
+      router.replace("/access-denied"); // OR "/not-found"
+    };
+
+    window.addEventListener(FORCE_LOGOUT_EVENT, handleForceLogout);
+    window.addEventListener(FORBIDDEN_EVENT, onForbidden);
+
+    return () => {
+      window.removeEventListener(FORCE_LOGOUT_EVENT, handleForceLogout);
+      window.removeEventListener(FORBIDDEN_EVENT, onForbidden);
+    };
+  }, [logout, router]);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
     try {
       await authApi.login(email, password);
       await fetchUser();
-      router.push('/dashboard');
+      router.push("/dashboard");
     } catch (error) {
       setIsLoading(false);
       throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await authApi.logout();
-    } catch {
-      // Ignore logout errors
-    } finally {
-      setUser(null);
-      disconnectSocket();
-      router.push('/login');
     }
   };
 
@@ -78,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Get roles from user.roles array
     if (user.roles && Array.isArray(user.roles)) {
       user.roles.forEach((r) => {
-        if (typeof r === 'string') {
+        if (typeof r === "string") {
           userRoles.push(r.toLowerCase());
         } else if (r?.slug) {
           userRoles.push(r.slug.toLowerCase());
@@ -88,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Also check legacy role property
     if (user.role) {
-      if (typeof user.role === 'string') {
+      if (typeof user.role === "string") {
         userRoles.push(user.role.toLowerCase());
       } else if (user.role?.slug) {
         userRoles.push(user.role.slug.toLowerCase());
@@ -103,13 +136,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) return null;
 
     // Priority order: super_admin > company_admin > manager > user
-    const priority: RoleSlug[] = ['super_admin', 'company_admin', 'manager', 'user'];
+    const priority: RoleSlug[] = [
+      "super_admin",
+      "company_admin",
+      "manager",
+      "user",
+    ];
 
     const userRoles: string[] = [];
 
     if (user.roles && Array.isArray(user.roles)) {
       user.roles.forEach((r) => {
-        if (typeof r === 'string') {
+        if (typeof r === "string") {
           userRoles.push(r.toLowerCase());
         } else if (r?.slug) {
           userRoles.push(r.slug.toLowerCase());
@@ -118,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (user.role) {
-      if (typeof user.role === 'string') {
+      if (typeof user.role === "string") {
         userRoles.push(user.role.toLowerCase());
       } else if (user.role?.slug) {
         userRoles.push(user.role.slug.toLowerCase());
@@ -155,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

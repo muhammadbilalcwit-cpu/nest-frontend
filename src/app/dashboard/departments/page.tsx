@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout";
 import { Table, Modal, ConfirmDialog } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { departmentsApi, companiesApi } from "@/services/api";
+import { subscribeToNotifications } from "@/services/socket";
 import { Plus, Pencil, Trash2 } from "lucide-react";
-import type { Department, Company } from "@/types";
+import type { Department, Company, NotificationPayload } from "@/types";
 
 export default function DepartmentsPage() {
   const { hasRole } = useAuth();
@@ -22,15 +23,12 @@ export default function DepartmentsPage() {
     name: "",
     companyId: 0,
   });
+  const [error, setError] = useState<string | null>(null);
 
   const canManage = hasRole(["super_admin", "company_admin"]);
   const isSuperAdmin = hasRole("super_admin");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [deptRes, compRes] = await Promise.all([
         departmentsApi.getAll(),
@@ -45,7 +43,36 @@ export default function DepartmentsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Subscribe to real-time notifications for department changes
+  useEffect(() => {
+    const unsubscribe = subscribeToNotifications(
+      (notification: NotificationPayload) => {
+        const departmentEvents = [
+          "department:created",
+          "department:updated",
+          "department:deleted",
+        ];
+
+        if (departmentEvents.includes(notification.type)) {
+          console.log(
+            "Real-time update: Refreshing departments data",
+            notification.type
+          );
+          fetchData();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchData]);
 
   const openCreateModal = () => {
     setSelectedDepartment(null);
@@ -64,6 +91,7 @@ export default function DepartmentsPage() {
 
   const openDeleteDialog = (dept: Department) => {
     setSelectedDepartment(dept);
+    setError(null);
     setIsDeleteDialogOpen(true);
   };
 
@@ -91,20 +119,28 @@ export default function DepartmentsPage() {
   const handleDelete = async () => {
     if (!selectedDepartment) return;
     setIsSubmitting(true);
+    setError(null);
 
     try {
       await departmentsApi.delete(selectedDepartment.id);
       setIsDeleteDialogOpen(false);
       fetchData();
-    } catch (error) {
-      console.error("Failed to delete department:", error);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { message?: string } } };
+      const message =
+        axiosError.response?.data?.message || "Failed to delete department";
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const columns = [
-    { key: "id", header: "ID", sortable: true },
+    {
+      key: "rowNumber",
+      header: "#",
+      render: (_dept: Department, index: number) => index + 1,
+    },
     { key: "name", header: "Name", sortable: true },
     {
       key: "company",
@@ -230,8 +266,8 @@ export default function DepartmentsPage() {
               {isSubmitting
                 ? "Saving..."
                 : selectedDepartment
-                ? "Update"
-                : "Create"}
+                  ? "Update"
+                  : "Create"}
             </button>
           </div>
         </form>
@@ -247,6 +283,7 @@ export default function DepartmentsPage() {
         confirmText="Delete"
         isDestructive
         isLoading={isSubmitting}
+        error={error}
       />
     </DashboardLayout>
   );

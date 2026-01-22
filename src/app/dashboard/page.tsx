@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout';
 import { StatsCard } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { companiesApi, departmentsApi, usersApi } from '@/services/api';
+import { subscribeToNotifications } from '@/services/socket';
 import { Building, FolderTree, Users, Activity } from 'lucide-react';
-import type { Company, Department, User } from '@/types';
+import type { Company, Department, User, NotificationPayload } from '@/types';
 
 export default function DashboardPage() {
   const { primaryRole, user } = useAuth();
@@ -18,53 +19,87 @@ export default function DashboardPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const promises: Promise<unknown>[] = [];
+  const fetchStats = useCallback(async () => {
+    try {
+      const promises: Promise<unknown>[] = [];
 
-        if (primaryRole === 'super_admin') {
-          promises.push(
-            companiesApi.getAll().then((res) => res.data.data),
-            departmentsApi.getAll().then((res) => res.data.data),
-            usersApi.getAll().then((res) => res.data.data)
-          );
+      if (primaryRole === 'super_admin') {
+        promises.push(
+          companiesApi.getAll().then((res) => res.data.data),
+          departmentsApi.getAll().then((res) => res.data.data),
+          usersApi.getAll().then((res) => res.data.data)
+        );
 
-          const [companies, departments, users] = await Promise.all(promises) as [Company[], Department[], User[]];
-          setStats({
-            companies: companies.length,
-            departments: departments.length,
-            users: users.length,
-          });
-        } else if (primaryRole === 'company_admin' || primaryRole === 'manager') {
-          const [departments, users] = await Promise.all([
-            departmentsApi.getAll().then((res) => res.data.data),
-            usersApi.getAll().then((res) => res.data.data),
-          ]) as [Department[], User[]];
+        const [companies, departments, users] = await Promise.all(promises) as [Company[], Department[], User[]];
+        setStats({
+          companies: companies.length,
+          departments: departments.length,
+          users: users.length,
+        });
+      } else if (primaryRole === 'company_admin' || primaryRole === 'manager') {
+        const [departments, users] = await Promise.all([
+          departmentsApi.getAll().then((res) => res.data.data),
+          usersApi.getAll().then((res) => res.data.data),
+        ]) as [Department[], User[]];
 
-          setStats({
-            companies: 1, // Their own company
-            departments: departments.length,
-            users: users.length,
-          });
-        } else {
-          // Regular user
-          setStats({
-            companies: 0,
-            departments: 0,
-            users: 0,
-          });
-        }
-
-      } catch (error) {
-        console.error('Failed to fetch stats:', error);
-      } finally {
-        setIsLoading(false);
+        setStats({
+          companies: 1, // Their own company
+          departments: departments.length,
+          users: users.length,
+        });
+      } else {
+        // Regular user
+        setStats({
+          companies: 0,
+          departments: 0,
+          users: 0,
+        });
       }
-    };
 
-    fetchStats();
+    } catch (error) {
+      console.error('Failed to fetch stats:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [primaryRole]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Subscribe to real-time notifications for stats updates
+  useEffect(() => {
+    const unsubscribe = subscribeToNotifications(
+      (notification: NotificationPayload) => {
+        // Refresh stats when any entity changes
+        const relevantEvents = [
+          'company:created',
+          'company:updated',
+          'company:deleted',
+          'department:created',
+          'department:updated',
+          'department:deleted',
+          'user:created',
+          'user:updated',
+          'user:deleted',
+          'user:activated',
+          'user:deactivated',
+        ];
+
+        if (relevantEvents.includes(notification.type)) {
+          console.log(
+            'Real-time update: Refreshing dashboard stats',
+            notification.type
+          );
+          fetchStats();
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchStats]);
 
   const getWelcomeMessage = () => {
     const name = user?.firstname || user?.email?.split('@')[0] || 'User';

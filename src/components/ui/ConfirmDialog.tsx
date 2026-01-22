@@ -13,6 +13,7 @@ interface ConfirmDialogProps {
   cancelText?: string;
   isDestructive?: boolean;
   isLoading?: boolean;
+  error?: string | null;
 }
 
 export function ConfirmDialog({
@@ -25,6 +26,7 @@ export function ConfirmDialog({
   cancelText = 'Cancel',
   isDestructive = false,
   isLoading = false,
+  error = null,
 }: ConfirmDialogProps) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm">
@@ -40,7 +42,12 @@ export function ConfirmDialog({
               : 'text-amber-600 dark:text-amber-400'
           }`} />
         </div>
-        <p className="text-slate-600 dark:text-dark-muted mb-6">{message}</p>
+        <p className="text-slate-600 dark:text-dark-muted mb-4">{message}</p>
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          </div>
+        )}
         <div className="flex gap-3 justify-center">
           <button
             onClick={onClose}

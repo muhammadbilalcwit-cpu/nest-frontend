@@ -7,7 +7,7 @@ interface Column<T> {
   key: string;
   header: string;
   sortable?: boolean;
-  render?: (item: T) => React.ReactNode;
+  render?: (item: T, index: number) => React.ReactNode;
   className?: string;
 }
 
@@ -95,7 +95,7 @@ export function Table<T>({
                 </td>
               </tr>
             ) : (
-              data.map((item) => (
+              data.map((item, index) => (
                 <tr
                   key={keyExtractor(item)}
                   className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
@@ -103,7 +103,7 @@ export function Table<T>({
                   {columns.map((column) => (
                     <td key={column.key} className={clsx('table-cell', column.className)}>
                       {column.render
-                        ? column.render(item)
+                        ? column.render(item, index)
                         : ((item as Record<string, unknown>)[column.key] as React.ReactNode)}
                     </td>
                   ))}

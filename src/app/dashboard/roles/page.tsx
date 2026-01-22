@@ -60,7 +60,11 @@ export default function RolesPage() {
   };
 
   const columns = [
-    { key: 'id', header: 'ID', sortable: true },
+    {
+      key: 'rowNumber',
+      header: '#',
+      render: (_role: Role, index: number) => index + 1,
+    },
     { key: 'name', header: 'Name', sortable: true },
     {
       key: 'slug',

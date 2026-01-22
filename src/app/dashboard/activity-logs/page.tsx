@@ -79,7 +79,11 @@ export default function ActivityLogsPage() {
   };
 
   const columns = [
-    { key: 'id', header: 'ID', sortable: true },
+    {
+      key: 'rowNumber',
+      header: '#',
+      render: (_log: ActivityLog, index: number) => (meta.page - 1) * meta.limit + index + 1,
+    },
     {
       key: 'createdAt',
       header: 'Time',
