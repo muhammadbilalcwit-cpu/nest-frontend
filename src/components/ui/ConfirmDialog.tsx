@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from 'lucide-react';
 import { Modal } from './Modal';
+import { Alert } from './Alert';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -44,9 +45,7 @@ export function ConfirmDialog({
         </div>
         <p className="text-slate-600 dark:text-dark-muted mb-4">{message}</p>
         {error && (
-          <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          </div>
+          <Alert variant="error" message={error} className="mb-4" />
         )}
         <div className="flex gap-3 justify-center">
           <button

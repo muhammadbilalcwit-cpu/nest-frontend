@@ -2,14 +2,12 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table } from '@/components/ui';
-import { useAuth } from '@/context/AuthContext';
+import { Table, PageHeader, Badge, getMethodVariant } from '@/components/ui';
 import { activityLogsApi } from '@/services/api';
-import { Activity, Filter, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ActivityLog, PaginationMeta } from '@/types';
 
 export default function ActivityLogsPage() {
-  const { hasRole } = useAuth();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>({
     total: 0,
@@ -22,8 +20,6 @@ export default function ActivityLogsPage() {
     method: '',
     search: '',
   });
-
-  const canViewLogs = hasRole(['super_admin', 'company_admin']);
 
   const fetchLogs = useCallback(async (page = 1) => {
     setIsLoading(true);
@@ -44,10 +40,8 @@ export default function ActivityLogsPage() {
   }, [filter.method, filter.search]);
 
   useEffect(() => {
-    if (canViewLogs) {
-      fetchLogs(1);
-    }
-  }, [canViewLogs, fetchLogs]);
+    fetchLogs(1);
+  }, [fetchLogs]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= meta.totalPages) {
@@ -63,16 +57,7 @@ export default function ActivityLogsPage() {
     fetchLogs(1);
   };
 
-  const getMethodBadge = (method: string) => {
-    const colors: Record<string, string> = {
-      GET: 'badge-primary',
-      POST: 'badge-success',
-      PUT: 'badge-warning',
-      PATCH: 'badge-warning',
-      DELETE: 'badge-danger',
-    };
-    return colors[method] || 'bg-slate-100 text-slate-600';
-  };
+  // getMethodBadge replaced by Badge component with getMethodVariant helper
 
   const formatTimestamp = (timestamp: string) => {
     return new Date(timestamp).toLocaleString();
@@ -97,7 +82,7 @@ export default function ActivityLogsPage() {
       key: 'method',
       header: 'Method',
       render: (log: ActivityLog) => (
-        <span className={`badge ${getMethodBadge(log.method)}`}>{log.method}</span>
+        <Badge label={log.method} variant={getMethodVariant(log.method)} />
       ),
     },
     { key: 'api', header: 'Endpoint' },
@@ -105,40 +90,21 @@ export default function ActivityLogsPage() {
     { key: 'ipAddress', header: 'IP Address' },
   ];
 
-  if (!canViewLogs) {
-    return (
-      <DashboardLayout title="Activity Logs">
-        <div className="card p-8 text-center">
-          <Activity className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-            Access Restricted
-          </h3>
-          <p className="text-slate-500 dark:text-dark-muted">
-            Only Super Admins and Company Admins can view activity logs.
-          </p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   return (
     <DashboardLayout title="Activity Logs">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Activity Logs</h2>
-          <p className="text-slate-500 dark:text-dark-muted mt-1">
-            Monitor user activity in your organization
-          </p>
-        </div>
-
-        <button
-          onClick={() => fetchLogs(meta.page)}
-          className="btn-secondary flex items-center gap-2 self-start"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Activity Logs"
+        subtitle="Monitor user activity in your organization"
+        actions={
+          <button
+            onClick={() => fetchLogs(meta.page)}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        }
+      />
 
       {/* Filters */}
       <div className="card p-4 mb-6">
@@ -161,10 +127,7 @@ export default function ActivityLogsPage() {
 
           <select
             value={filter.method}
-            onChange={(e) => {
-              handleFilterChange('method', e.target.value);
-              setTimeout(() => fetchLogs(1), 0);
-            }}
+            onChange={(e) => handleFilterChange('method', e.target.value)}
             className="input w-auto"
           >
             <option value="">All Methods</option>

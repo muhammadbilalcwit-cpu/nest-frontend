@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout";
-import { Table, Modal, ConfirmDialog } from "@/components/ui";
+import { Table, Modal, ConfirmDialog, PageHeader } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { departmentsApi, companiesApi } from "@/services/api";
 import { subscribeToNotifications } from "@/services/socket";
@@ -177,25 +177,21 @@ export default function DepartmentsPage() {
 
   return (
     <DashboardLayout title="Departments">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Departments
-          </h2>
-          <p className="text-slate-500 dark:text-dark-muted mt-1">
-            Manage organization departments
-          </p>
-        </div>
-        {canManage && (
-          <button
-            onClick={openCreateModal}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Department
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Departments"
+        subtitle="Manage organization departments"
+        actions={
+          canManage ? (
+            <button
+              onClick={openCreateModal}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Department
+            </button>
+          ) : undefined
+        }
+      />
 
       <Table
         columns={columns}

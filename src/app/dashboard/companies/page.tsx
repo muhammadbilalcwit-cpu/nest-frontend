@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table, Modal, ConfirmDialog } from '@/components/ui';
+import { Table, Modal, ConfirmDialog, PageHeader } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { companiesApi } from '@/services/api';
 import { subscribeToNotifications } from '@/services/socket';
@@ -162,20 +162,18 @@ export default function CompaniesPage() {
 
   return (
     <DashboardLayout title="Companies">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Companies</h2>
-          <p className="text-slate-500 dark:text-dark-muted mt-1">
-            Manage all registered companies
-          </p>
-        </div>
-        {canManage && (
-          <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            Add Company
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Companies"
+        subtitle="Manage all registered companies"
+        actions={
+          canManage ? (
+            <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              Add Company
+            </button>
+          ) : undefined
+        }
+      />
 
       <Table
         columns={columns}

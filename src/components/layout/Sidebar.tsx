@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronLeft,
   Shield,
+  Wifi,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -61,13 +62,19 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       href: '/dashboard/roles',
       label: 'Roles',
       icon: <Shield className="w-5 h-5" />,
+      roles: ['super_admin'],
+    },
+    {
+      href: '/dashboard/active-sessions',
+      label: 'Active Sessions',
+      icon: <Wifi className="w-5 h-5" />,
       roles: ['super_admin', 'company_admin'],
     },
     {
       href: '/dashboard/activity-logs',
       label: 'Activity Logs',
       icon: <ScrollText className="w-5 h-5" />,
-      roles: ['company_admin'],
+      roles: ['super_admin', 'company_admin'],
     },
     {
       href: '/dashboard/settings',

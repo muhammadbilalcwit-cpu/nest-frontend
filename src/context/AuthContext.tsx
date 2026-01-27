@@ -11,7 +11,12 @@ import React, {
 import { useRouter } from "next/navigation";
 import type { User, RoleSlug } from "@/types";
 import { authApi, FORCE_LOGOUT_EVENT, FORBIDDEN_EVENT } from "@/services/api";
-import { connectSocket, disconnectSocket } from "@/services/socket";
+import {
+  connectSocket,
+  disconnectSocket,
+  subscribeToForceDisconnect,
+  subscribeToSessionExpired,
+} from "@/services/socket";
 
 interface AuthContextType {
   user: User | null;
@@ -46,36 +51,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(async () => {
-    // Prevent multiple simultaneous logout calls
-    if (isLoggingOut.current) return;
-    isLoggingOut.current = true;
+  // Logout with optional flash message (uses sessionStorage for flash messages)
+  // Only sets flash when user is currently authenticated (prevents false messages on login page)
+  const logoutWithMessage = useCallback(
+    async (errorCode?: string) => {
+      // Prevent multiple simultaneous logout calls
+      if (isLoggingOut.current) return;
+      isLoggingOut.current = true;
 
-    try {
-      await authApi.logout();
-    } catch {
-      // Ignore logout errors - server might reject if session already invalid
-    } finally {
-      setUser(null);
-      disconnectSocket();
-      isLoggingOut.current = false;
-      router.push("/login");
-    }
-  }, [router]);
+      // Only set flash message if user was authenticated (not already on login page)
+      const wasAuthenticated = !!user;
+
+      try {
+        await authApi.logout();
+      } catch {
+        // Ignore logout errors - server might reject if session already invalid
+      } finally {
+        setUser(null);
+        disconnectSocket();
+        isLoggingOut.current = false;
+
+        // Store flash message only if user was logged in (prevents flash on login page refresh)
+        if (errorCode && wasAuthenticated) {
+          sessionStorage.setItem("flash_error", errorCode);
+        }
+
+        router.push("/login");
+      }
+    },
+    [router, user],
+  );
+
+  // Regular logout without message
+  const logout = useCallback(async () => {
+    await logoutWithMessage();
+  }, [logoutWithMessage]);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
-  // Listen for force logout events from axios interceptor
+  // Listen for force logout events from axios interceptor (only when authenticated)
   useEffect(() => {
+    if (!user) return;
+
     const handleForceLogout = () => {
       console.log("Force logout triggered - user session invalid");
-      logout();
+      logoutWithMessage("session_invalid");
     };
 
     const onForbidden = () => {
-      router.replace("/access-denied"); // OR "/not-found"
+      router.replace("/access-denied");
     };
 
     window.addEventListener(FORCE_LOGOUT_EVENT, handleForceLogout);
@@ -85,7 +111,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener(FORCE_LOGOUT_EVENT, handleForceLogout);
       window.removeEventListener(FORBIDDEN_EVENT, onForbidden);
     };
-  }, [logout, router]);
+  }, [user, logoutWithMessage, router]);
+
+  // Listen for force disconnect event from WebSocket (session revoked by admin)
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribeToForceDisconnect((payload) => {
+      console.log("Session revoked by admin:", payload.reason);
+      logoutWithMessage("session_revoked");
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, logoutWithMessage]);
+
+  // Listen for session expired event from WebSocket (session expired by cron job)
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribeToSessionExpired((payload) => {
+      console.log("Session expired:", payload.reason, payload.message);
+      logoutWithMessage("session_expired");
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [user, logoutWithMessage]);
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);

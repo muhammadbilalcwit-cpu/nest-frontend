@@ -1,22 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Building2, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Alert } from '@/components/ui';
+import { Building2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+
+// Flash message mapping - error codes to user-friendly messages
+const FLASH_MESSAGES: Record<string, string> = {
+  session_expired: 'Your session has expired. Please log in again.',
+  session_revoked: 'Your session has been revoked by an administrator.',
+  session_invalid: 'Your session is no longer valid. Please log in again.',
+  unauthorized: 'You are not authorized. Please log in.',
+};
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [flashMessage, setFlashMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
+  // Read flash message from sessionStorage on mount and clear it (flash behavior)
+  useEffect(() => {
+    const errorCode = sessionStorage.getItem('flash_error');
+
+    if (errorCode) {
+      // Set flash message based on error code
+      const message = FLASH_MESSAGES[errorCode] || 'An error occurred. Please log in again.';
+      setFlashMessage(message);
+
+      // Clear sessionStorage immediately (flash = show once)
+      sessionStorage.removeItem('flash_error');
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFlashMessage(''); // Clear flash message on submit
     setIsSubmitting(true);
 
     try {
@@ -96,11 +121,14 @@ export default function LoginPage() {
               </p>
             </div>
 
+            {/* Flash message (from redirect) */}
+            {flashMessage && (
+              <Alert variant="warning" message={flashMessage} className="mb-6" />
+            )}
+
+            {/* Login error */}
             {error && (
-              <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-              </div>
+              <Alert variant="error" message={error} className="mb-6" />
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">

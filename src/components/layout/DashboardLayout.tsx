@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { isRouteAllowed } from '@/config/route-permissions';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import clsx from 'clsx';
@@ -14,14 +15,22 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, title }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, hasRole } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Route guard: redirect to access-denied if user lacks permission
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !isRouteAllowed(pathname, hasRole)) {
+      router.replace('/access-denied');
+    }
+  }, [isLoading, isAuthenticated, pathname, hasRole, router]);
 
   if (isLoading) {
     return (
@@ -32,6 +41,11 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
   }
 
   if (!isAuthenticated) {
+    return null;
+  }
+
+  // Don't render page content if route is not allowed
+  if (!isRouteAllowed(pathname, hasRole)) {
     return null;
   }
 

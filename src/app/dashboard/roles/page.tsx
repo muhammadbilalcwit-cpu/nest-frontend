@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table } from '@/components/ui';
+import { Table, PageHeader, Badge, getRoleVariant } from '@/components/ui';
 import { rolesApi } from '@/services/api';
 import { Shield } from 'lucide-react';
 
@@ -31,18 +31,7 @@ export default function RolesPage() {
     }
   };
 
-  const getRoleBadgeColor = (slug: string) => {
-    switch (slug) {
-      case 'super_admin':
-        return 'badge-danger';
-      case 'company_admin':
-        return 'badge-warning';
-      case 'manager':
-        return 'badge-primary';
-      default:
-        return 'badge-success';
-    }
-  };
+  // getRoleBadgeColor replaced by getRoleVariant helper from Badge component
 
   const getRoleDescription = (slug: string) => {
     switch (slug) {
@@ -70,9 +59,7 @@ export default function RolesPage() {
       key: 'slug',
       header: 'Slug',
       render: (role: Role) => (
-        <span className={`badge ${getRoleBadgeColor(role.slug)}`}>
-          {role.slug}
-        </span>
+        <Badge label={role.slug} variant={getRoleVariant(role.slug)} />
       ),
     },
     {
@@ -88,12 +75,10 @@ export default function RolesPage() {
 
   return (
     <DashboardLayout title="Roles">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Roles</h2>
-        <p className="text-slate-500 dark:text-dark-muted mt-1">
-          View system roles and their permissions
-        </p>
-      </div>
+      <PageHeader
+        title="Roles"
+        subtitle="View system roles and their permissions"
+      />
 
       {/* Role Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -6,6 +6,15 @@ import type {
   Department,
   ActivityLog,
   PaginatedData,
+  NotificationPayload,
+  PaginatedNotifications,
+  UnreadNotificationsPayload,
+  OnlineUserInfo,
+  RevokeSessionResponse,
+  RevokeSpecificSessionResponse,
+  AllCompaniesStatusResponse,
+  OnlineUsersWithSessionsResponse,
+  CompanyUsersWithSessionsResponse,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -228,6 +237,35 @@ export const rolesApi = {
     ),
 };
 
+// Notifications endpoints
+export const notificationsApi = {
+  // Get paginated notifications
+  getAll: (page = 1, limit = 20) =>
+    api.get<ApiResponse<PaginatedNotifications>>(
+      `/notifications?page=${page}&limit=${limit}`,
+    ),
+
+  // Get unread notifications
+  getUnread: () =>
+    api.get<ApiResponse<UnreadNotificationsPayload>>("/notifications/unread"),
+
+  // Get unread count
+  getUnreadCount: () =>
+    api.get<ApiResponse<{ count: number }>>("/notifications/unread/count"),
+
+  // Mark single notification as read
+  markAsRead: (id: number) =>
+    api.patch<ApiResponse<{ notificationId: number; unreadCount: number }>>(
+      `/notifications/${id}/read`,
+    ),
+
+  // Mark all notifications as read
+  markAllAsRead: () =>
+    api.patch<ApiResponse<{ markedCount: number; unreadCount: number }>>(
+      "/notifications/read/all",
+    ),
+};
+
 // Activity logs endpoints (for company_admin)
 export const activityLogsApi = {
   getAll: (params?: {
@@ -249,6 +287,75 @@ export const activityLogsApi = {
 
   getByUserId: (userId: number) =>
     api.get<ApiResponse<ActivityLog[]>>(`/activity-logs/user/${userId}`),
+};
+
+// Active Sessions / Online Users endpoints (for company_admin)
+export const activeSessionsApi = {
+  // Get online users only (legacy)
+  getOnlineUsers: () =>
+    api.get<ApiResponse<{ onlineUsers: OnlineUserInfo[]; count: number }>>(
+      "/notifications/admin/online-users",
+    ),
+
+  // Get online users with their sessions (NEW - company_admin)
+  getOnlineUsersWithSessions: () =>
+    api.get<ApiResponse<OnlineUsersWithSessionsResponse>>(
+      "/notifications/admin/users-status",
+    ),
+
+  // Revoke ALL sessions for a user
+  revokeAllUserSessions: (userId: number) =>
+    api.post<ApiResponse<RevokeSessionResponse>>(
+      `/notifications/admin/revoke-session/${userId}`,
+    ),
+
+  // Revoke a SPECIFIC session by sessionId (NEW)
+  revokeSpecificSession: (sessionId: number) =>
+    api.post<ApiResponse<RevokeSpecificSessionResponse>>(
+      `/notifications/admin/revoke-specific-session/${sessionId}`,
+    ),
+
+  // Revoke all sessions in company (company admin only)
+  revokeAllSessions: () =>
+    api.post<
+      ApiResponse<{
+        companyId: number;
+        usersDisconnected: number;
+        socketsDisconnected: number;
+        sessionsInvalidated: number;
+      }>
+    >("/notifications/admin/revoke-all-sessions"),
+
+  // ===== SUPER ADMIN ENDPOINTS =====
+
+  // Get all companies with their user status (super_admin only)
+  getAllCompaniesStatus: () =>
+    api.get<ApiResponse<AllCompaniesStatusResponse>>(
+      "/notifications/admin/companies-status",
+    ),
+
+  // Get online users with sessions for a specific company (super_admin only)
+  getCompanyUsersWithSessions: (companyId: number) =>
+    api.get<ApiResponse<CompanyUsersWithSessionsResponse>>(
+      `/notifications/admin/company/${companyId}/users-status`,
+    ),
+
+  // Revoke all sessions for a specific company (super_admin only)
+  revokeAllSessionsForCompany: (companyId: number) =>
+    api.post<
+      ApiResponse<{
+        companyId: number;
+        usersDisconnected: number;
+        socketsDisconnected: number;
+        sessionsInvalidated: number;
+      }>
+    >(`/notifications/admin/company/${companyId}/revoke-all-sessions`),
+
+  // Revoke a specific session for a company (super_admin only)
+  revokeSpecificSessionForCompany: (companyId: number, sessionId: number) =>
+    api.post<ApiResponse<RevokeSpecificSessionResponse>>(
+      `/notifications/admin/company/${companyId}/revoke-session/${sessionId}`,
+    ),
 };
 
 export default api;

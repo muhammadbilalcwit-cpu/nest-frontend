@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout';
-import { StatsCard } from '@/components/ui';
+import { StatsCard, PageHeader, EmptyState } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { companiesApi, departmentsApi, usersApi } from '@/services/api';
 import { subscribeToNotifications } from '@/services/socket';
@@ -281,34 +281,26 @@ export default function DashboardPage() {
 
       default:
         return (
-          <div className="card p-8 text-center">
-            <div className="w-16 h-16 bg-primary-100 dark:bg-primary-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Users className="w-8 h-8 text-primary-600 dark:text-primary-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
-              Welcome to Enterprise MS
-            </h3>
-            <p className="text-slate-500 dark:text-dark-muted mb-6">
-              Manage your profile and preferences from the settings page.
-            </p>
-            <Link href="/dashboard/settings" className="btn-primary inline-block">
-              Go to Settings
-            </Link>
-          </div>
+          <EmptyState
+            icon={<Users className="w-8 h-8 text-primary-600 dark:text-primary-400" />}
+            title="Welcome to Enterprise MS"
+            message="Manage your profile and preferences from the settings page."
+            action={
+              <Link href="/dashboard/settings" className="btn-primary inline-block">
+                Go to Settings
+              </Link>
+            }
+          />
         );
     }
   };
 
   return (
     <DashboardLayout title="Dashboard">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-          {getWelcomeMessage()}
-        </h2>
-        <p className="text-slate-500 dark:text-dark-muted mt-1">
-          Here&apos;s what&apos;s happening in your organization today.
-        </p>
-      </div>
+      <PageHeader
+        title={getWelcomeMessage()}
+        subtitle="Here's what's happening in your organization today."
+      />
 
       {getRoleSpecificContent()}
     </DashboardLayout>

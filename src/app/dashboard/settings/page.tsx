@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout';
+import { Alert, PageHeader } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { usersApi } from '@/services/api';
 import {
   User as UserIcon,
   Lock,
   Palette,
-  Check,
-  AlertCircle,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -98,39 +97,14 @@ export default function SettingsPage() {
 
   return (
     <DashboardLayout title="Settings">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Settings</h2>
-        <p className="text-slate-500 dark:text-dark-muted mt-1">
-          Manage your account settings and preferences
-        </p>
-      </div>
+      <PageHeader
+        title="Settings"
+        subtitle="Manage your account settings and preferences"
+      />
 
       {/* Message Alert */}
       {message && (
-        <div
-          className={clsx(
-            'mb-6 p-4 rounded-lg flex items-center gap-3',
-            message.type === 'success'
-              ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-              : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
-          )}
-        >
-          {message.type === 'success' ? (
-            <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
-          )}
-          <p
-            className={clsx(
-              'text-sm',
-              message.type === 'success'
-                ? 'text-green-600 dark:text-green-400'
-                : 'text-red-600 dark:text-red-400'
-            )}
-          >
-            {message.text}
-          </p>
-        </div>
+        <Alert variant={message.type} message={message.text} className="mb-6" />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

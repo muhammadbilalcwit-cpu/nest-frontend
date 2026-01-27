@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table, Modal, ConfirmDialog } from '@/components/ui';
+import { Table, Modal, ConfirmDialog, PageHeader, Badge, getRoleVariant } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { usersApi, departmentsApi, rolesApi, companiesApi } from '@/services/api';
 import { subscribeToNotifications } from '@/services/socket';
@@ -381,28 +381,18 @@ export default function UsersPage() {
 
   const getRoleBadge = (user: User) => {
     const userRoles = user.roles || (user.role ? [user.role] : []);
-    if (userRoles.length === 0) return <span className="badge bg-slate-100 text-slate-600">No role</span>;
+    if (userRoles.length === 0) return <Badge label="No role" variant="default" />;
 
     return (
       <div className="flex flex-wrap gap-1">
         {userRoles.slice(0, 2).map((role, index) => {
           const slug = typeof role === 'string' ? role : role.slug;
-          const colorClass =
-            slug === 'super_admin'
-              ? 'badge-danger'
-              : slug === 'company_admin'
-              ? 'badge-warning'
-              : slug === 'manager'
-              ? 'badge-primary'
-              : 'badge-success';
           return (
-            <span key={index} className={`badge ${colorClass}`}>
-              {slug.replace('_', ' ')}
-            </span>
+            <Badge key={index} label={slug.replace('_', ' ')} variant={getRoleVariant(slug)} />
           );
         })}
         {userRoles.length > 2 && (
-          <span className="badge bg-slate-100 text-slate-600">+{userRoles.length - 2}</span>
+          <Badge label={`+${userRoles.length - 2}`} variant="default" />
         )}
       </div>
     );
@@ -509,35 +499,33 @@ export default function UsersPage() {
 
   return (
     <DashboardLayout title="Users">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Users</h2>
-          <p className="text-slate-500 dark:text-dark-muted mt-1">
-            Manage department users
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          {canChangeStatus && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-                className="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500"
-              />
-              <span className="text-sm text-slate-600 dark:text-dark-muted">
-                Show inactive users
-              </span>
-            </label>
-          )}
-          {canManage && (
-            <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Add User
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Users"
+        subtitle="Manage department users"
+        actions={
+          <>
+            {canChangeStatus && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeInactive}
+                  onChange={(e) => setIncludeInactive(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500"
+                />
+                <span className="text-sm text-slate-600 dark:text-dark-muted">
+                  Show inactive users
+                </span>
+              </label>
+            )}
+            {canManage && (
+              <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                Add User
+              </button>
+            )}
+          </>
+        }
+      />
 
       <Table
         columns={columns}
