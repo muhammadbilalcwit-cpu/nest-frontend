@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Alert } from '@/components/ui';
+import { Alert, FormField, Button } from '@/components/ui';
 import { Building2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 // Flash message mapping - error codes to user-friendly messages
@@ -132,39 +132,31 @@ export default function LoginPage() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="label">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="input pl-10"
-                    placeholder="Enter your email"
-                    required
-                    autoComplete="email"
-                  />
-                </div>
-              </div>
+              <FormField
+                label="Email Address"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                required
+                autoComplete="email"
+                icon={<Mail className="w-5 h-5" />}
+              />
 
-              <div>
-                <label className="label">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input pl-10 pr-10"
-                    placeholder="Enter your password"
-                    required
-                    autoComplete="current-password"
-                  />
+              <FormField
+                label="Password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
+                autoComplete="current-password"
+                icon={<Lock className="w-5 h-5" />}
+                rightElement={
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   >
                     {showPassword ? (
                       <EyeOff className="w-5 h-5" />
@@ -172,23 +164,17 @@ export default function LoginPage() {
                       <Eye className="w-5 h-5" />
                     )}
                   </button>
-                </div>
-              </div>
+                }
+              />
 
-              <button
+              <Button
                 type="submit"
-                disabled={isSubmitting}
-                className="btn-primary w-full py-3 text-base"
+                isLoading={isSubmitting}
+                loadingText="Signing in..."
+                className="w-full py-3 text-base"
               >
-                {isSubmitting ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Signing in...
-                  </span>
-                ) : (
-                  'Sign In'
-                )}
-              </button>
+                Sign In
+              </Button>
             </form>
           </div>
         </div>

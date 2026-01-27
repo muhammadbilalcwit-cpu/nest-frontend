@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table, PageHeader, Badge, getMethodVariant } from '@/components/ui';
+import { Table, PageHeader, Badge, getMethodVariant, Button, Pagination, FormField, FormSelect } from '@/components/ui';
 import { activityLogsApi } from '@/services/api';
-import { Filter, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, RefreshCw } from 'lucide-react';
 import type { ActivityLog, PaginationMeta } from '@/types';
 
 export default function ActivityLogsPage() {
@@ -96,13 +96,9 @@ export default function ActivityLogsPage() {
         title="Activity Logs"
         subtitle="Monitor user activity in your organization"
         actions={
-          <button
-            onClick={() => fetchLogs(meta.page)}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" />
+          <Button variant="secondary" onClick={() => fetchLogs(meta.page)} icon={<RefreshCw className="w-4 h-4" />}>
             Refresh
-          </button>
+          </Button>
         }
       />
 
@@ -115,35 +111,32 @@ export default function ActivityLogsPage() {
           </div>
 
           <div className="flex-1">
-            <input
+            <FormField
               type="text"
               value={filter.search}
               onChange={(e) => handleFilterChange('search', e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
               placeholder="Search by user, endpoint, or reason..."
-              className="input"
             />
           </div>
 
-          <select
+          <FormSelect
             value={filter.method}
             onChange={(e) => handleFilterChange('method', e.target.value)}
-            className="input w-auto"
-          >
-            <option value="">All Methods</option>
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-            <option value="PUT">PUT</option>
-            <option value="PATCH">PATCH</option>
-            <option value="DELETE">DELETE</option>
-          </select>
+            className="w-auto"
+            options={[
+              { value: 'GET', label: 'GET' },
+              { value: 'POST', label: 'POST' },
+              { value: 'PUT', label: 'PUT' },
+              { value: 'PATCH', label: 'PATCH' },
+              { value: 'DELETE', label: 'DELETE' },
+            ]}
+            placeholder="All Methods"
+          />
 
-          <button
-            onClick={handleApplyFilters}
-            className="btn-primary"
-          >
+          <Button onClick={handleApplyFilters}>
             Apply
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -170,55 +163,11 @@ export default function ActivityLogsPage() {
       />
 
       {/* Pagination */}
-      {meta.totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6">
-          <button
-            onClick={() => handlePageChange(meta.page - 1)}
-            disabled={meta.page <= 1}
-            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Previous
-          </button>
-
-          <div className="flex items-center gap-2">
-            {Array.from({ length: Math.min(5, meta.totalPages) }, (_, i) => {
-              let pageNum: number;
-              if (meta.totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (meta.page <= 3) {
-                pageNum = i + 1;
-              } else if (meta.page >= meta.totalPages - 2) {
-                pageNum = meta.totalPages - 4 + i;
-              } else {
-                pageNum = meta.page - 2 + i;
-              }
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => handlePageChange(pageNum)}
-                  className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
-                    meta.page === pageNum
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-dark-text hover:bg-slate-200 dark:hover:bg-slate-600'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            onClick={() => handlePageChange(meta.page + 1)}
-            disabled={meta.page >= meta.totalPages}
-            className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <Pagination
+        page={meta.page}
+        totalPages={meta.totalPages}
+        onPageChange={handlePageChange}
+      />
     </DashboardLayout>
   );
 }

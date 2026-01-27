@@ -8,8 +8,12 @@ import { NotificationProvider } from '@/context/NotificationContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Companies Management System',
+  title: {
+    default: 'Enterprise MS',
+    template: '%s | Enterprise MS',
+  },
   description: 'Manage your organization with ease',
+  keywords: ['enterprise', 'management', 'companies', 'departments', 'users'],
 };
 
 export default function RootLayout({

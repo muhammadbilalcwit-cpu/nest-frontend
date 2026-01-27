@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout';
-import { StatsCard, PageHeader, EmptyState } from '@/components/ui';
+import { StatsCard, PageHeader, EmptyState, QuickActionCard } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { companiesApi, departmentsApi, usersApi } from '@/services/api';
 import { subscribeToNotifications } from '@/services/socket';
@@ -142,33 +142,9 @@ export default function DashboardPage() {
                   Quick Actions
                 </h3>
                 <div className="space-y-3">
-                  <Link
-                    href="/dashboard/companies"
-                    className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Building className="w-5 h-5 text-primary-600" />
-                      <span className="text-slate-700 dark:text-dark-text">Manage Companies</span>
-                    </div>
-                  </Link>
-                  <Link
-                    href="/dashboard/departments"
-                    className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FolderTree className="w-5 h-5 text-green-600" />
-                      <span className="text-slate-700 dark:text-dark-text">Manage Departments</span>
-                    </div>
-                  </Link>
-                  <Link
-                    href="/dashboard/users"
-                    className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Users className="w-5 h-5 text-amber-600" />
-                      <span className="text-slate-700 dark:text-dark-text">Manage Users</span>
-                    </div>
-                  </Link>
+                  <QuickActionCard href="/dashboard/companies" icon={<Building className="w-5 h-5 text-primary-600" />} label="Manage Companies" />
+                  <QuickActionCard href="/dashboard/departments" icon={<FolderTree className="w-5 h-5 text-green-600" />} label="Manage Departments" />
+                  <QuickActionCard href="/dashboard/users" icon={<Users className="w-5 h-5 text-amber-600" />} label="Manage Users" />
                 </div>
               </div>
 
@@ -218,33 +194,9 @@ export default function DashboardPage() {
                 Quick Actions
               </h3>
               <div className="space-y-3">
-                <Link
-                  href="/dashboard/departments"
-                  className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <FolderTree className="w-5 h-5 text-primary-600" />
-                    <span className="text-slate-700 dark:text-dark-text">Manage Departments</span>
-                  </div>
-                </Link>
-                <Link
-                  href="/dashboard/users"
-                  className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-green-600" />
-                    <span className="text-slate-700 dark:text-dark-text">Manage Users</span>
-                  </div>
-                </Link>
-                <Link
-                  href="/dashboard/activity-logs"
-                  className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Activity className="w-5 h-5 text-amber-600" />
-                    <span className="text-slate-700 dark:text-dark-text">View Activity Logs</span>
-                  </div>
-                </Link>
+                <QuickActionCard href="/dashboard/departments" icon={<FolderTree className="w-5 h-5 text-primary-600" />} label="Manage Departments" />
+                <QuickActionCard href="/dashboard/users" icon={<Users className="w-5 h-5 text-green-600" />} label="Manage Users" />
+                <QuickActionCard href="/dashboard/activity-logs" icon={<Activity className="w-5 h-5 text-amber-600" />} label="View Activity Logs" />
               </div>
             </div>
           </>
@@ -266,15 +218,7 @@ export default function DashboardPage() {
               <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">
                 Team Management
               </h3>
-              <Link
-                href="/dashboard/users"
-                className="block p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="w-5 h-5 text-primary-600" />
-                  <span className="text-slate-700 dark:text-dark-text">View Team Members</span>
-                </div>
-              </Link>
+              <QuickActionCard href="/dashboard/users" icon={<Users className="w-5 h-5 text-primary-600" />} label="View Team Members" />
             </div>
           </>
         );

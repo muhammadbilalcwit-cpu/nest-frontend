@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table, Modal, ConfirmDialog, PageHeader } from '@/components/ui';
+import { Table, Modal, ConfirmDialog, PageHeader, FormField, FormTextarea, Button, IconActionButton, ModalFooter } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { companiesApi } from '@/services/api';
 import { subscribeToNotifications } from '@/services/socket';
@@ -139,20 +139,18 @@ export default function CompaniesPage() {
             header: 'Actions',
             render: (company: Company) => (
               <div className="flex items-center gap-2">
-                <button
+                <IconActionButton
                   onClick={() => openEditModal(company)}
-                  className="p-2 text-slate-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                  icon={<Pencil className="w-4 h-4" />}
+                  color="primary"
                   title="Edit"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
+                />
+                <IconActionButton
                   onClick={() => openDeleteDialog(company)}
-                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  icon={<Trash2 className="w-4 h-4" />}
+                  color="danger"
                   title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                />
               </div>
             ),
           },
@@ -167,10 +165,9 @@ export default function CompaniesPage() {
         subtitle="Manage all registered companies"
         actions={
           canManage ? (
-            <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
-              <Plus className="w-4 h-4" />
+            <Button onClick={openCreateModal} icon={<Plus className="w-4 h-4" />}>
               Add Company
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -190,40 +187,27 @@ export default function CompaniesPage() {
         title={selectedCompany ? 'Edit Company' : 'Create Company'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="label">Company Name</label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="input"
-              placeholder="Enter company name"
-              required
-            />
-          </div>
+          <FormField
+            label="Company Name"
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="Enter company name"
+            required
+          />
 
-          <div>
-            <label className="label">Address</label>
-            <textarea
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="input min-h-[100px]"
-              placeholder="Enter company address"
-            />
-          </div>
+          <FormTextarea
+            label="Address"
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            placeholder="Enter company address"
+          />
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="btn-secondary flex-1"
-            >
-              Cancel
-            </button>
-            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">
-              {isSubmitting ? 'Saving...' : selectedCompany ? 'Update' : 'Create'}
-            </button>
-          </div>
+          <ModalFooter
+            onCancel={() => setIsModalOpen(false)}
+            submitLabel={selectedCompany ? 'Update' : 'Create'}
+            isLoading={isSubmitting}
+          />
         </form>
       </Modal>
 

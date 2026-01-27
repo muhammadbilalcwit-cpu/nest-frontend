@@ -2,25 +2,19 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Table, Modal, ConfirmDialog, PageHeader, Badge, getRoleVariant } from '@/components/ui';
+import { Table, Modal, ConfirmDialog, PageHeader, Badge, getRoleVariant, getStatusVariant, FormField, FormSelect, Button, IconActionButton, ModalFooter } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { usersApi, departmentsApi, rolesApi, companiesApi } from '@/services/api';
 import { subscribeToNotifications } from '@/services/socket';
 import { Plus, Pencil, Trash2, Shield, X, Power } from 'lucide-react';
-import type { User, Department, Company, NotificationPayload } from '@/types';
-
-interface RoleOption {
-  id: number;
-  name: string;
-  slug: string;
-}
+import type { User, Department, Company, Role, NotificationPayload } from '@/types';
 
 export default function UsersPage() {
   const { hasRole, user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
@@ -108,32 +102,21 @@ export default function UsersPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      // Only super_admin and company_admin can access companies endpoint
       const canAccessCompanies = isSuperAdmin || isCompanyAdmin;
 
-      // Fetch data based on role permissions
-      const [usersRes, deptsRes, rolesRes] = await Promise.all([
+      const [usersRes, deptsRes, rolesRes, companiesRes] = await Promise.all([
         usersApi.getAll(includeInactive),
         departmentsApi.getAll(),
         rolesApi.getAll(),
+        canAccessCompanies
+          ? companiesApi.getAll().catch(() => ({ data: { data: [] } }))
+          : Promise.resolve({ data: { data: [] } }),
       ]);
 
       setUsers(usersRes.data.data || []);
       setDepartments(deptsRes.data.data || []);
       setRoles(rolesRes.data.data || []);
-
-      // Fetch companies separately only if user has access
-      if (canAccessCompanies) {
-        try {
-          const companiesRes = await companiesApi.getAll();
-          setCompanies(companiesRes.data.data || []);
-        } catch (err) {
-          console.error('Failed to fetch companies:', err);
-          setCompanies([]);
-        }
-      } else {
-        setCompanies([]);
-      }
+      setCompanies(companiesRes.data.data || []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -433,18 +416,8 @@ export default function UsersPage() {
       key: 'status',
       header: 'Status',
       render: (user: User) => {
-        const isActive = user.isActive !== false; // Default to active if undefined
-        return (
-          <span
-            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              isActive
-                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-            }`}
-          >
-            {isActive ? 'Active' : 'Inactive'}
-          </span>
-        );
+        const isActive = user.isActive !== false;
+        return <Badge label={isActive ? 'Active' : 'Inactive'} variant={getStatusVariant(isActive)} />;
       },
     },
     ...(canManage
@@ -455,41 +428,33 @@ export default function UsersPage() {
             render: (user: User) => (
               <div className="flex items-center gap-2">
                 {canAssignRoles && (
-                  <button
+                  <IconActionButton
                     onClick={() => openRoleModal(user)}
-                    className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
+                    icon={<Shield className="w-4 h-4" />}
+                    color="amber"
                     title="Manage Roles"
-                  >
-                    <Shield className="w-4 h-4" />
-                  </button>
+                  />
                 )}
                 {canChangeUserStatus(user) && (
-                  <button
+                  <IconActionButton
                     onClick={() => openStatusDialog(user)}
-                    className={`p-2 rounded-lg transition-colors ${
-                      user.isActive !== false
-                        ? 'text-slate-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20'
-                        : 'text-slate-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20'
-                    }`}
+                    icon={<Power className="w-4 h-4" />}
+                    color={user.isActive !== false ? 'orange' : 'green'}
                     title={user.isActive !== false ? 'Deactivate User' : 'Activate User'}
-                  >
-                    <Power className="w-4 h-4" />
-                  </button>
+                  />
                 )}
-                <button
+                <IconActionButton
                   onClick={() => openEditModal(user)}
-                  className="p-2 text-slate-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                  icon={<Pencil className="w-4 h-4" />}
+                  color="primary"
                   title="Edit"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-                <button
+                />
+                <IconActionButton
                   onClick={() => openDeleteDialog(user)}
-                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  icon={<Trash2 className="w-4 h-4" />}
+                  color="danger"
                   title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                />
               </div>
             ),
           },
@@ -518,10 +483,9 @@ export default function UsersPage() {
               </label>
             )}
             {canManage && (
-              <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
-                <Plus className="w-4 h-4" />
+              <Button onClick={openCreateModal} icon={<Plus className="w-4 h-4" />}>
                 Add User
-              </button>
+              </Button>
             )}
           </>
         }
@@ -543,132 +507,94 @@ export default function UsersPage() {
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {!selectedUser && (
-            <div>
-              <label className="label">Email</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="input"
-                placeholder="Enter email"
-                required
-              />
-            </div>
+            <FormField
+              label="Email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="Enter email"
+              required
+            />
           )}
 
-          <div>
-            <label className="label">First Name</label>
-            <input
-              type="text"
-              value={formData.firstname}
-              onChange={(e) => setFormData({ ...formData, firstname: e.target.value })}
-              className="input"
-              placeholder="Enter first name"
-            />
-          </div>
+          <FormField
+            label="First Name"
+            type="text"
+            value={formData.firstname}
+            onChange={(e) => setFormData({ ...formData, firstname: e.target.value })}
+            placeholder="Enter first name"
+          />
 
-          <div>
-            <label className="label">Last Name</label>
-            <input
-              type="text"
-              value={formData.lastname}
-              onChange={(e) => setFormData({ ...formData, lastname: e.target.value })}
-              className="input"
-              placeholder="Enter last name"
-            />
-          </div>
+          <FormField
+            label="Last Name"
+            type="text"
+            value={formData.lastname}
+            onChange={(e) => setFormData({ ...formData, lastname: e.target.value })}
+            placeholder="Enter last name"
+          />
 
-          <div>
-            <label className="label">{selectedUser ? 'New Password (leave blank to keep current)' : 'Password'}</label>
-            <input
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="input"
-              placeholder="Enter password"
-              required={!selectedUser}
-            />
-          </div>
+          <FormField
+            label={selectedUser ? 'New Password (leave blank to keep current)' : 'Password'}
+            type="password"
+            value={formData.password}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            placeholder="Enter password"
+            required={!selectedUser}
+          />
 
           {!selectedUser && (
             <>
               {/* Role Selection */}
-              <div>
-                <label className="label">Role</label>
-                <select
-                  value={formData.roleSlug}
-                  onChange={(e) => setFormData({ ...formData, roleSlug: e.target.value, companyId: 0, departmentId: 0 })}
-                  className="input"
-                  required
-                >
-                  <option value="">Select a role</option>
-                  {availableRoles.map((role) => (
-                    <option key={role.id} value={role.slug}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <FormSelect
+                label="Role"
+                value={formData.roleSlug}
+                onChange={(e) => setFormData({ ...formData, roleSlug: e.target.value, companyId: 0, departmentId: 0 })}
+                options={availableRoles.map((role) => ({
+                  value: role.slug,
+                  label: role.name,
+                }))}
+                placeholder="Select a role"
+                required
+              />
 
               {/* Company Selection - Only for super_admin and certain roles */}
               {showCompanySelect && (
-                <div>
-                  <label className="label">Company</label>
-                  <select
-                    value={formData.companyId}
-                    onChange={(e) => setFormData({ ...formData, companyId: Number(e.target.value), departmentId: 0 })}
-                    className="input"
-                    required
-                  >
-                    <option value="">Select a company</option>
-                    {companies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <FormSelect
+                  label="Company"
+                  value={formData.companyId}
+                  onChange={(e) => setFormData({ ...formData, companyId: Number(e.target.value), departmentId: 0 })}
+                  options={companies.map((company) => ({
+                    value: company.id,
+                    label: company.name,
+                  }))}
+                  placeholder="Select a company"
+                  required
+                />
               )}
 
               {/* Department Selection - For manager and user roles */}
               {showDepartmentSelect && (
-                <div>
-                  <label className="label">Department</label>
-                  <select
-                    value={formData.departmentId}
-                    onChange={(e) => setFormData({ ...formData, departmentId: Number(e.target.value) })}
-                    className="input"
-                    required
-                    disabled={isSuperAdmin && !formData.companyId}
-                  >
-                    <option value="">
-                      {isSuperAdmin && !formData.companyId
-                        ? 'Select a company first'
-                        : 'Select a department'}
-                    </option>
-                    {filteredDepartments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name} {isSuperAdmin && dept.company ? `(${dept.company.name})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <FormSelect
+                  label="Department"
+                  value={formData.departmentId}
+                  onChange={(e) => setFormData({ ...formData, departmentId: Number(e.target.value) })}
+                  options={filteredDepartments.map((dept) => ({
+                    value: dept.id,
+                    label: `${dept.name}${isSuperAdmin && dept.company ? ` (${dept.company.name})` : ''}`,
+                  }))}
+                  placeholder={isSuperAdmin && !formData.companyId ? 'Select a company first' : 'Select a department'}
+                  required
+                  disabled={isSuperAdmin && !formData.companyId}
+                />
               )}
             </>
           )}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="btn-secondary flex-1"
-            >
-              Cancel
-            </button>
-            <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">
-              {isSubmitting ? 'Saving...' : selectedUser ? 'Update' : 'Create'}
-            </button>
-          </div>
+          <ModalFooter
+            onCancel={() => setIsModalOpen(false)}
+            submitLabel={selectedUser ? 'Update' : 'Create'}
+            isLoading={isSubmitting}
+          />
         </form>
       </Modal>
 
@@ -823,24 +749,16 @@ export default function UsersPage() {
             );
           })()}
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setIsRoleModalOpen(false)}
-              className="btn-secondary flex-1"
-            >
-              Close
-            </button>
-            {selectedRoles.length > 0 && (
-              <button
-                onClick={handleAssignRoles}
-                disabled={isSubmitting}
-                className="btn-primary flex-1"
-              >
-                {isSubmitting ? 'Adding...' : `Add ${selectedRoles.length} Role${selectedRoles.length > 1 ? 's' : ''}`}
-              </button>
-            )}
-          </div>
+          <ModalFooter
+            onCancel={() => setIsRoleModalOpen(false)}
+            cancelLabel="Close"
+            submitLabel={`Add ${selectedRoles.length} Role${selectedRoles.length > 1 ? 's' : ''}`}
+            isSubmit={false}
+            onSubmit={handleAssignRoles}
+            isLoading={isSubmitting}
+            loadingText="Adding..."
+            disabled={selectedRoles.length === 0}
+          />
         </div>
       </Modal>
 

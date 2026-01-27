@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { isRouteAllowed } from '@/config/route-permissions';
+import { Button } from '@/components/ui';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import clsx from 'clsx';
@@ -25,13 +27,6 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
     }
   }, [isAuthenticated, isLoading, router]);
 
-  // Route guard: redirect to access-denied if user lacks permission
-  useEffect(() => {
-    if (!isLoading && isAuthenticated && !isRouteAllowed(pathname, hasRole)) {
-      router.replace('/access-denied');
-    }
-  }, [isLoading, isAuthenticated, pathname, hasRole, router]);
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg">
@@ -44,9 +39,25 @@ export function DashboardLayout({ children, title }: DashboardLayoutProps) {
     return null;
   }
 
-  // Don't render page content if route is not allowed
+  // Render access denied inline instead of redirecting (avoids progress cursor)
   if (!isRouteAllowed(pathname, hasRole)) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-dark-bg px-4">
+        <div className="max-w-md w-full text-center card p-8">
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
+            Access Restricted
+          </h1>
+          <p className="mt-4 text-sm text-slate-600 dark:text-dark-muted">
+            You don&apos;t have permission to access this resource.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link href="/dashboard">
+              <Button>Go to Dashboard</Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

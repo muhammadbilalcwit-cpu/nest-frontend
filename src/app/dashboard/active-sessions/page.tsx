@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout";
-import { Alert } from "@/components/ui";
+import { Alert, PageHeader, Button, LoadingSpinner, StatsCard } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { activeSessionsApi } from "@/services/api";
 import {
@@ -35,16 +35,29 @@ import type {
   CompanyStatus,
 } from "@/types";
 import clsx from "clsx";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faChrome,
+  faFirefoxBrowser,
+  faSafari,
+  faEdge,
+  faOpera,
+} from "@fortawesome/free-brands-svg-icons";
 
 // Helper to get browser icon
 const getBrowserIcon = (browser: string) => {
   const browserLower = browser.toLowerCase();
-  if (browserLower.includes("chrome")) return "🌐";
-  if (browserLower.includes("firefox")) return "🦊";
-  if (browserLower.includes("safari")) return "🧭";
-  if (browserLower.includes("edge")) return "🌊";
-  if (browserLower.includes("opera")) return "🔴";
-  return "🌐";
+  if (browserLower.includes("chrome"))
+    return <FontAwesomeIcon icon={faChrome} className="w-4 h-4 text-[#4285F4]" />;
+  if (browserLower.includes("firefox"))
+    return <FontAwesomeIcon icon={faFirefoxBrowser} className="w-4 h-4 text-[#FF7139]" />;
+  if (browserLower.includes("safari"))
+    return <FontAwesomeIcon icon={faSafari} className="w-4 h-4 text-[#006CFF]" />;
+  if (browserLower.includes("edge"))
+    return <FontAwesomeIcon icon={faEdge} className="w-4 h-4 text-[#0078D7]" />;
+  if (browserLower.includes("opera"))
+    return <FontAwesomeIcon icon={faOpera} className="w-4 h-4 text-[#FF1B2D]" />;
+  return <Globe className="w-4 h-4 text-slate-400" />;
 };
 
 // Helper to get OS icon
@@ -380,11 +393,7 @@ export default function ActiveSessionsPage() {
       unsubscribeSessionAdded();
       unsubscribeSessionRemoved();
     };
-  }, [
-    handleUserStatusChange,
-    handleSessionAdded,
-    handleSessionRemoved,
-  ]);
+  }, [handleUserStatusChange, handleSessionAdded, handleSessionRemoved]);
 
   // Revoke a specific session
   const handleRevokeSession = async (sessionId: number) => {
@@ -468,7 +477,7 @@ export default function ActiveSessionsPage() {
         className="flex items-center justify-between py-2 px-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg"
       >
         <div className="flex items-center gap-3">
-          <span className="text-lg">{getBrowserIcon(session.browser)}</span>
+          {getBrowserIcon(session.browser)}
           <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
             {getOsIcon(session.os)}
           </div>
@@ -658,77 +667,26 @@ export default function ActiveSessionsPage() {
   if (isSuperAdmin && !selectedCompany) {
     return (
       <DashboardLayout title="Active Sessions">
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-              Active Sessions - All Companies
-            </h2>
-            <p className="text-slate-500 dark:text-dark-muted mt-1">
-              Monitor user sessions across all companies
-            </p>
-          </div>
-
-          <button
-            onClick={fetchCompanies}
-            disabled={isLoading}
-            className="btn-secondary flex items-center gap-2 self-start"
-          >
-            <RefreshCw
-              className={clsx("w-4 h-4", isLoading && "animate-spin")}
-            />
-            Refresh
-          </button>
-        </div>
+        <PageHeader
+          title="Active Sessions - All Companies"
+          subtitle="Monitor user sessions across all companies"
+          actions={
+            <Button
+              variant="secondary"
+              onClick={fetchCompanies}
+              disabled={isLoading}
+              icon={<RefreshCw className={clsx("w-4 h-4", isLoading && "animate-spin")} />}
+            >
+              Refresh
+            </Button>
+          }
+        />
 
         {/* Global Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700">
-                <Building className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Companies
-                </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {globalStats.totalCompanies}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700">
-                <Users className="w-5 h-5 text-slate-600 dark:text-slate-300" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Total Users
-                </p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {globalStats.totalUsers}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                <Wifi className="w-5 h-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Online Now
-                </p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {globalStats.totalOnline}
-                </p>
-              </div>
-            </div>
-          </div>
+          <StatsCard title="Companies" value={globalStats.totalCompanies} icon={<Building className="w-6 h-6" />} color="primary" />
+          <StatsCard title="Total Users" value={globalStats.totalUsers} icon={<Users className="w-6 h-6" />} color="primary" />
+          <StatsCard title="Online Now" value={globalStats.totalOnline} icon={<Wifi className="w-6 h-6" />} color="success" />
 
           {/* <div className="card p-4">
             <div className="flex items-center gap-3">
@@ -749,10 +707,7 @@ export default function ActiveSessionsPage() {
 
         {/* Companies List */}
         {isLoading ? (
-          <div className="card p-8 text-center">
-            <RefreshCw className="w-8 h-8 animate-spin text-slate-400 mx-auto mb-2" />
-            <p className="text-slate-500">Loading companies...</p>
-          </div>
+          <LoadingSpinner message="Loading companies..." />
         ) : companies.length === 0 ? (
           <div className="card p-8 text-center">
             <Building className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
@@ -768,109 +723,71 @@ export default function ActiveSessionsPage() {
   // Company Admin View or Super Admin Drill-down View
   return (
     <DashboardLayout title="Active Sessions">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          {isSuperAdmin && selectedCompany && (
-            <button
-              onClick={handleBackToCompanies}
-              className="flex items-center gap-1 text-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 mb-4"
+      {isSuperAdmin && selectedCompany && (
+        <button
+          onClick={handleBackToCompanies}
+          className="flex items-center gap-1 text-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 mb-4"
+        >
+          <ArrowLeft className="w-4 h-4 mr-3" />
+          Back to Companies
+        </button>
+      )}
+
+      <PageHeader
+        title={`Active Sessions${selectedCompany ? ` - ${selectedCompany.name}` : ""}`}
+        subtitle={`Monitor and manage online user sessions${selectedCompany ? ` in ${selectedCompany.name}` : " in your organization"}`}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() =>
+                selectedCompany
+                  ? fetchCompanyUsers(selectedCompany.id)
+                  : fetchUsers()
+              }
+              disabled={isLoading}
+              icon={<RefreshCw className={clsx("w-4 h-4", isLoading && "animate-spin")} />}
             >
-              <ArrowLeft className="w-4 h-4 mr-3" />
-              Back to Companies
-            </button>
-          )}
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            Active Sessions
-            {selectedCompany && ` - ${selectedCompany.name}`}
-          </h2>
-          <p className="text-slate-500 dark:text-dark-muted mt-1">
-            Monitor and manage online user sessions
-            {selectedCompany
-              ? ` in ${selectedCompany.name}`
-              : " in your organization"}
-          </p>
-        </div>
+              Refresh
+            </Button>
 
-        <div className="flex items-center gap-2 self-start">
-          <button
-            onClick={() =>
-              selectedCompany
-                ? fetchCompanyUsers(selectedCompany.id)
-                : fetchUsers()
-            }
-            disabled={isLoading}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <RefreshCw
-              className={clsx("w-4 h-4", isLoading && "animate-spin")}
-            />
-            Refresh
-          </button>
-
-          {stats.onlineUsers > 1 && !showRevokeAllConfirm && (
-            <button
-              onClick={() => setShowRevokeAllConfirm(true)}
-              disabled={revokingAll}
-              className="btn-danger flex items-center gap-2"
-            >
-              <ShieldOff className="w-4 h-4" />
-              Revoke All
-            </button>
-          )}
-
-          {showRevokeAllConfirm && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleRevokeAllSessions}
+            {stats.onlineUsers > 1 && !showRevokeAllConfirm && (
+              <Button
+                variant="danger"
+                onClick={() => setShowRevokeAllConfirm(true)}
                 disabled={revokingAll}
-                className="btn-danger flex items-center gap-2"
+                icon={<ShieldOff className="w-4 h-4" />}
               >
-                {revokingAll ? "Revoking..." : "Confirm Revoke All"}
-              </button>
-              <button
-                onClick={() => setShowRevokeAllConfirm(false)}
-                className="btn-secondary"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+                Revoke All
+              </Button>
+            )}
+
+            {showRevokeAllConfirm && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="danger"
+                  onClick={handleRevokeAllSessions}
+                  isLoading={revokingAll}
+                  loadingText="Revoking..."
+                >
+                  Confirm Revoke All
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowRevokeAllConfirm(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        }
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-              <Wifi className="w-5 h-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Online Users
-              </p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {stats.onlineUsers}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <Monitor className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Active Sessions
-              </p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {stats.totalSessions}
-              </p>
-            </div>
-          </div>
-        </div>
+        <StatsCard title="Online Users" value={stats.onlineUsers} icon={<Wifi className="w-6 h-6" />} color="success" />
+        <StatsCard title="Active Sessions" value={stats.totalSessions} icon={<Monitor className="w-6 h-6" />} color="primary" />
       </div>
 
       {/* Info Banner */}
@@ -882,10 +799,7 @@ export default function ActiveSessionsPage() {
 
       {/* Users List */}
       {isLoading ? (
-        <div className="card p-8 text-center">
-          <RefreshCw className="w-8 h-8 animate-spin text-slate-400 mx-auto mb-2" />
-          <p className="text-slate-500">Loading sessions...</p>
-        </div>
+        <LoadingSpinner message="Loading sessions..." />
       ) : users.length === 0 ? (
         <div className="card p-8 text-center">
           <Users className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />

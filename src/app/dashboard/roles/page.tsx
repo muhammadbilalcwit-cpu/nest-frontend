@@ -5,12 +5,7 @@ import { DashboardLayout } from '@/components/layout';
 import { Table, PageHeader, Badge, getRoleVariant } from '@/components/ui';
 import { rolesApi } from '@/services/api';
 import { Shield } from 'lucide-react';
-
-interface Role {
-  id: number;
-  name: string;
-  slug: string;
-}
+import type { Role } from '@/types';
 
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);

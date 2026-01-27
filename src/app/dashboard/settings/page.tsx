@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout';
-import { Alert, PageHeader } from '@/components/ui';
+import { Alert, PageHeader, FormField, Button } from '@/components/ui';
 import { useAuth } from '@/context/AuthContext';
 import { usersApi } from '@/services/api';
 import {
@@ -144,35 +144,29 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div>
-                  <label className="label">Email Address</label>
-                  <input
-                    type="email"
-                    value={user?.email || ''}
-                    className="input bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
-                    disabled
-                  />
-                </div>
+                <FormField
+                  label="Email Address"
+                  type="email"
+                  value={user?.email || ''}
+                  className="bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
+                  disabled
+                />
 
-                <div>
-                  <label className="label">First Name</label>
-                  <input
-                    type="text"
-                    value={user?.firstname || '-'}
-                    className="input bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
-                    disabled
-                  />
-                </div>
+                <FormField
+                  label="First Name"
+                  type="text"
+                  value={user?.firstname || '-'}
+                  className="bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
+                  disabled
+                />
 
-                <div>
-                  <label className="label">Last Name</label>
-                  <input
-                    type="text"
-                    value={user?.lastname || '-'}
-                    className="input bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
-                    disabled
-                  />
-                </div>
+                <FormField
+                  label="Last Name"
+                  type="text"
+                  value={user?.lastname || '-'}
+                  className="bg-slate-100 dark:bg-slate-700 cursor-not-allowed"
+                  disabled
+                />
               </div>
             )}
 
@@ -188,50 +182,41 @@ export default function SettingsPage() {
                   </p>
                 </div>
 
-                <div>
-                  <label className="label">Current Password</label>
-                  <input
-                    type="password"
-                    value={passwordData.currentPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                    className="input"
-                    placeholder="Enter current password"
-                    required
-                  />
-                </div>
+                <FormField
+                  label="Current Password"
+                  type="password"
+                  value={passwordData.currentPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                  placeholder="Enter current password"
+                  required
+                />
 
-                <div>
-                  <label className="label">New Password</label>
-                  <input
-                    type="password"
-                    value={passwordData.newPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                    className="input"
-                    placeholder="Enter new password"
-                    required
-                  />
-                </div>
+                <FormField
+                  label="New Password"
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  placeholder="Enter new password"
+                  required
+                />
 
-                <div>
-                  <label className="label">Confirm New Password</label>
-                  <input
-                    type="password"
-                    value={passwordData.confirmPassword}
-                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                    className="input"
-                    placeholder="Confirm new password"
-                    required
-                  />
-                </div>
+                <FormField
+                  label="Confirm New Password"
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  placeholder="Confirm new password"
+                  required
+                />
 
-                <button
+                <Button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="btn-primary flex items-center gap-2"
+                  isLoading={isSubmitting}
+                  loadingText="Changing..."
+                  icon={<Lock className="w-4 h-4" />}
                 >
-                  <Lock className="w-4 h-4" />
-                  {isSubmitting ? 'Changing...' : 'Change Password'}
-                </button>
+                  Change Password
+                </Button>
               </form>
             )}
 

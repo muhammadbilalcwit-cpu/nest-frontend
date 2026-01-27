@@ -3,6 +3,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { Modal } from './Modal';
 import { Alert } from './Alert';
+import { Button } from './Button';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -48,27 +49,22 @@ export function ConfirmDialog({
           <Alert variant="error" message={error} className="mb-4" />
         )}
         <div className="flex gap-3 justify-center">
-          <button
+          <Button
+            variant="secondary"
             onClick={onClose}
             disabled={isLoading}
-            className="btn-secondary px-6"
+            className="px-6"
           >
             {cancelText}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={isDestructive ? 'danger' : 'primary'}
             onClick={onConfirm}
-            disabled={isLoading}
-            className={isDestructive ? 'btn-danger px-6' : 'btn-primary px-6'}
+            isLoading={isLoading}
+            className="px-6"
           >
-            {isLoading ? (
-              <span className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Processing...
-              </span>
-            ) : (
-              confirmText
-            )}
-          </button>
+            {confirmText}
+          </Button>
         </div>
       </div>
     </Modal>
