@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useAuth } from '@/context/AuthContext';
-import { useTheme } from '@/context/ThemeContext';
-import { useNotifications } from '@/context/NotificationContext';
+import Image from 'next/image';
+import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
+import { useNotificationStore } from '@/stores/notification.store';
 import {
   Bell,
   Sun,
@@ -14,14 +15,21 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000';
+
 interface HeaderProps {
   title: string;
 }
 
 export function Header({ title }: HeaderProps) {
-  const { user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotifications } = useNotifications();
+  const user = useAuthStore((s) => s.user);
+  const { theme, toggleTheme } = useThemeStore();
+  const notifications = useNotificationStore((s) => s.notifications);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const markAsRead = useNotificationStore((s) => s.markAsRead);
+  const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
+  const clearNotifications = useNotificationStore((s) => s.clearNotifications);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
 
@@ -197,8 +205,19 @@ export function Header({ title }: HeaderProps) {
             </div>
             <div className="text-xs text-slate-500 dark:text-dark-muted">{user?.email}</div>
           </div>
-          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-            <User className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+            {user?.profilePicture ? (
+              <Image
+                src={`${BACKEND_URL}${user.profilePicture}`}
+                alt="Profile"
+                width={40}
+                height={40}
+                className="w-full h-full object-cover"
+                unoptimized
+              />
+            ) : (
+              <User className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+            )}
           </div>
         </div>
       </div>

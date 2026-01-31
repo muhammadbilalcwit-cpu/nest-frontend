@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   Building2,
   LayoutDashboard,
@@ -32,7 +32,9 @@ interface NavItem {
 
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const { hasRole, logout, primaryRole } = useAuth();
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const logout = useAuthStore((s) => s.logout);
+  const primaryRole = useAuthStore((s) => s.primaryRole);
 
   const navItems: NavItem[] = [
     {
@@ -160,7 +162,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
         )}
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className={clsx(
             'w-full flex items-center gap-3 px-4 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors',
             isCollapsed && 'justify-center px-2'

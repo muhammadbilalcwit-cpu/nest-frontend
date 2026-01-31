@@ -1,28 +1,32 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout';
 import { Table, Modal, ConfirmDialog, PageHeader, Badge, getRoleVariant, getStatusVariant, FormField, FormSelect, Button, IconActionButton, ModalFooter } from '@/components/ui';
-import { useAuth } from '@/context/AuthContext';
-import { usersApi, departmentsApi, rolesApi, companiesApi } from '@/services/api';
-import { subscribeToNotifications } from '@/services/socket';
+import { useAuthStore } from '@/stores/auth.store';
+import { useUsers, useDepartments, useCompanies, useRoles } from '@/hooks/queries';
+import { useCreateUser, useUpdateUser, useDeleteUser, useUpdateUserStatus, useAssignRoles, useRemoveRole } from '@/hooks/mutations';
+import { getErrorMessage } from '@/lib/error-utils';
 import { Plus, Pencil, Trash2, Shield, X, Power } from 'lucide-react';
-import type { User, Department, Company, Role, NotificationPayload } from '@/types';
+import type { User, Department, Company } from '@/types';
 
 export default function UsersPage() {
-  const { hasRole, user: currentUser } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const currentUser = useAuthStore((s) => s.user);
+
+  const isSuperAdmin = hasRole('super_admin');
+  const isCompanyAdmin = hasRole('company_admin');
+  const canManage = hasRole(['super_admin', 'company_admin']);
+  const canAssignRoles = hasRole(['super_admin', 'company_admin']);
+  const canChangeStatus = hasRole(['super_admin', 'company_admin']);
+
+  const [includeInactive, setIncludeInactive] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [includeInactive, setIncludeInactive] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
     firstname: '',
@@ -33,13 +37,24 @@ export default function UsersPage() {
     roleSlug: 'user',
   });
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // const [error, setError] = useState<string | null>(null); // Uncomment for inline error display
 
-  const isSuperAdmin = hasRole('super_admin');
-  const isCompanyAdmin = hasRole('company_admin');
-  const canManage = hasRole(['super_admin', 'company_admin']);
-  const canAssignRoles = hasRole(['super_admin', 'company_admin']);
-  const canChangeStatus = hasRole(['super_admin', 'company_admin']);
+  // Query hooks
+  const { data: users = [], isLoading } = useUsers(includeInactive);
+  const { data: departments = [] } = useDepartments();
+  const { data: companies = [] } = useCompanies(isSuperAdmin || isCompanyAdmin);
+  const { data: roles = [] } = useRoles();
+
+  // Mutation hooks
+  const createUser = useCreateUser();
+  const updateUser = useUpdateUser();
+  const deleteUser = useDeleteUser();
+  const updateUserStatus = useUpdateUserStatus();
+  const assignRoles = useAssignRoles();
+  const removeRole = useRemoveRole();
+
+  const isSubmitting = createUser.isPending || updateUser.isPending || deleteUser.isPending ||
+    updateUserStatus.isPending || assignRoles.isPending || removeRole.isPending;
 
   // Get current user's company ID (for company_admin)
   // Option C: Use user.company directly as single source of truth
@@ -100,34 +115,6 @@ export default function UsersPage() {
     return ['manager', 'user'].includes(formData.roleSlug?.toLowerCase());
   }, [formData.roleSlug]);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const canAccessCompanies = isSuperAdmin || isCompanyAdmin;
-
-      const [usersRes, deptsRes, rolesRes, companiesRes] = await Promise.all([
-        usersApi.getAll(includeInactive),
-        departmentsApi.getAll(),
-        rolesApi.getAll(),
-        canAccessCompanies
-          ? companiesApi.getAll().catch(() => ({ data: { data: [] } }))
-          : Promise.resolve({ data: { data: [] } }),
-      ]);
-
-      setUsers(usersRes.data.data || []);
-      setDepartments(deptsRes.data.data || []);
-      setRoles(rolesRes.data.data || []);
-      setCompanies(companiesRes.data.data || []);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [includeInactive, isSuperAdmin, isCompanyAdmin]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   // Reset department when company changes
   useEffect(() => {
     if (formData.companyId && formData.departmentId) {
@@ -137,31 +124,6 @@ export default function UsersPage() {
       }
     }
   }, [formData.companyId, formData.departmentId, departments]);
-
-  // Subscribe to real-time notifications for user changes
-  useEffect(() => {
-    const unsubscribe = subscribeToNotifications((notification: NotificationPayload) => {
-      // Refresh data when user-related events occur
-      const userEvents = [
-        'user:created',
-        'user:updated',
-        'user:deleted',
-        'user:activated',
-        'user:deactivated',
-        'user:roles_assigned',
-        'user:role_removed',
-      ];
-
-      if (userEvents.includes(notification.type)) {
-        console.log('Real-time update: Refreshing users data', notification.type);
-        fetchData();
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [fetchData]);
 
   const openCreateModal = () => {
     setSelectedUser(null);
@@ -201,7 +163,7 @@ export default function UsersPage() {
 
   const openDeleteDialog = (user: User) => {
     setSelectedUser(user);
-    setError(null);
+    // setError(null); // Uncomment for inline error display
     setIsDeleteDialogOpen(true);
   };
 
@@ -210,25 +172,35 @@ export default function UsersPage() {
     setIsStatusDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    try {
-      if (selectedUser) {
-        const updateData: Partial<User> & { password?: string } = {
-          firstname: formData.firstname,
-          lastname: formData.lastname,
-        };
-        if (formData.password) {
-          updateData.password = formData.password;
+    if (selectedUser) {
+      const updateData: Partial<User> & { password?: string } = {
+        firstname: formData.firstname,
+        lastname: formData.lastname,
+      };
+      if (formData.password) {
+        updateData.password = formData.password;
+      }
+      updateUser.mutate(
+        { id: selectedUser.id, data: updateData },
+        {
+          onSuccess: () => {
+            toast.success('User updated successfully');
+            setIsModalOpen(false);
+          },
+          onError: (err) => {
+            toast.error(getErrorMessage(err, 'Failed to update user'));
+          },
         }
-        await usersApi.update(selectedUser.id, updateData);
-      } else {
-        // For company_admin: send companyId, no departmentId
-        // For manager/user: send departmentId
-        const isCompanyAdminRole = formData.roleSlug?.toLowerCase() === 'company_admin';
-        await usersApi.create({
+      );
+    } else {
+      // For company_admin: send companyId, no departmentId
+      // For manager/user: send departmentId
+      const isCompanyAdminRole = formData.roleSlug?.toLowerCase() === 'company_admin';
+      createUser.mutate(
+        {
           email: formData.email,
           firstname: formData.firstname,
           lastname: formData.lastname,
@@ -236,106 +208,120 @@ export default function UsersPage() {
           departmentId: showDepartmentSelect ? formData.departmentId : undefined,
           companyId: isCompanyAdminRole && formData.companyId ? formData.companyId : undefined,
           roleSlug: formData.roleSlug,
-        });
-      }
-      setIsModalOpen(false);
-      fetchData();
-    } catch (error) {
-      console.error('Failed to save user:', error);
-    } finally {
-      setIsSubmitting(false);
+        },
+        {
+          onSuccess: () => {
+            toast.success('User created successfully');
+            setIsModalOpen(false);
+          },
+          onError: (err) => {
+            toast.error(getErrorMessage(err, 'Failed to create user'));
+          },
+        }
+      );
     }
   };
 
-  const handleAssignRoles = async () => {
+  const handleAssignRoles = () => {
     if (!selectedUser || selectedRoles.length === 0) return;
-    setIsSubmitting(true);
 
-    try {
-      // Get current secondary roles
-      const primaryRoleSlug = typeof selectedUser.role === 'string'
-        ? selectedUser.role
-        : selectedUser.role?.slug;
-      const currentSecondaryRoles = selectedUser.roles
-        ?.map((r) => (typeof r === 'string' ? r : r.slug))
-        .filter((slug) => slug?.toLowerCase() !== primaryRoleSlug?.toLowerCase()) || [];
+    // Get current secondary roles
+    const primaryRoleSlug = typeof selectedUser.role === 'string'
+      ? selectedUser.role
+      : selectedUser.role?.slug;
+    const currentSecondaryRoles = selectedUser.roles
+      ?.map((r) => (typeof r === 'string' ? r : r.slug))
+      .filter((slug) => slug?.toLowerCase() !== primaryRoleSlug?.toLowerCase()) || [];
 
-      // Combine existing secondary roles with new selections (remove duplicates)
-      const allRoles = Array.from(new Set([...currentSecondaryRoles, ...selectedRoles]));
+    // Combine existing secondary roles with new selections (remove duplicates)
+    const allRoles = Array.from(new Set([...currentSecondaryRoles, ...selectedRoles]));
 
-      await usersApi.assignRoles(selectedUser.id, allRoles);
-      setIsRoleModalOpen(false);
-      setSelectedRoles([]);
-      fetchData();
-    } catch (error) {
-      console.error('Failed to assign roles:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    assignRoles.mutate(
+      { id: selectedUser.id, roleSlugs: allRoles as string[] },
+      {
+        onSuccess: () => {
+          toast.success('Roles assigned successfully');
+          setIsRoleModalOpen(false);
+          setSelectedRoles([]);
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, 'Failed to assign roles'));
+        },
+      }
+    );
   };
 
-  const handleRemoveRole = async (roleSlug: string) => {
+  const handleRemoveRole = (roleSlug: string) => {
     if (!selectedUser) return;
-    setIsSubmitting(true);
 
-    try {
-      await usersApi.removeRole(selectedUser.id, roleSlug);
-      fetchData();
-      // Update selectedUser to reflect the change
-      setSelectedUser((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          roles: prev.roles?.filter((r) => {
-            const slug = typeof r === 'string' ? r : r.slug;
-            return slug?.toLowerCase() !== roleSlug.toLowerCase();
-          }),
-        };
-      });
-    } catch (error) {
-      console.error('Failed to remove role:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    removeRole.mutate(
+      { id: selectedUser.id, slug: roleSlug },
+      {
+        onSuccess: () => {
+          toast.success('Role removed successfully');
+          // Update selectedUser to reflect the change
+          setSelectedUser((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              roles: prev.roles?.filter((r) => {
+                const slug = typeof r === 'string' ? r : r.slug;
+                return slug?.toLowerCase() !== roleSlug.toLowerCase();
+              }),
+            };
+          });
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, 'Failed to remove role'));
+        },
+      }
+    );
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!selectedUser) return;
-    setIsSubmitting(true);
-    setError(null);
+    // setError(null); // Uncomment for inline error display
 
-    try {
-      await usersApi.delete(selectedUser.id);
-      setIsDeleteDialogOpen(false);
-      fetchData();
-    } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      const message = axiosError.response?.data?.message || 'Failed to delete user';
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    deleteUser.mutate(selectedUser.id, {
+      onSuccess: () => {
+        toast.success('User deleted successfully');
+        setIsDeleteDialogOpen(false);
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, 'Failed to delete user'));
+        // setError(getErrorMessage(err, 'Failed to delete user')); // Uncomment for inline error display
+      },
+    });
   };
 
-  const handleStatusChange = async () => {
+  const handleStatusChange = () => {
     if (!selectedUser) return;
-    setIsSubmitting(true);
 
-    try {
-      const newStatus = !selectedUser.isActive;
-      await usersApi.updateStatus(selectedUser.id, newStatus);
-      setIsStatusDialogOpen(false);
-      fetchData();
-    } catch (error) {
-      console.error('Failed to update user status:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    const newStatus = !selectedUser.isActive;
+    updateUserStatus.mutate(
+      { id: selectedUser.id, isActive: newStatus },
+      {
+        onSuccess: () => {
+          toast.success(`User ${newStatus ? 'activated' : 'deactivated'} successfully`);
+          setIsStatusDialogOpen(false);
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, 'Failed to update user status'));
+        },
+      }
+    );
+  };
+
+  // Check if target user is the current logged-in user
+  const isCurrentUserRecord = (targetUser: User) => {
+    return currentUser?.id === targetUser.id;
   };
 
   // Check if current user can change status of target user
   const canChangeUserStatus = (targetUser: User) => {
     if (!canChangeStatus) return false;
+    // Cannot change own status
+    if (isCurrentUserRecord(targetUser)) return false;
 
     const targetRoles = targetUser.roles?.map((r) =>
       (typeof r === 'string' ? r : r.slug)?.toLowerCase()
@@ -359,6 +345,30 @@ export default function UsersPage() {
       }
     }
 
+    return true;
+  };
+
+  // Check if current user can edit target user (not self)
+  const canEditUser = (targetUser: User) => {
+    if (!canManage) return false;
+    // Cannot edit self from admin view - use Settings page
+    if (isCurrentUserRecord(targetUser)) return false;
+    return true;
+  };
+
+  // Check if current user can delete target user (not self)
+  const canDeleteUser = (targetUser: User) => {
+    if (!canManage) return false;
+    // Cannot delete self
+    if (isCurrentUserRecord(targetUser)) return false;
+    return true;
+  };
+
+  // Check if current user can manage roles of target user (not self)
+  const canManageUserRoles = (targetUser: User) => {
+    if (!canAssignRoles) return false;
+    // Cannot manage own roles from admin view
+    if (isCurrentUserRecord(targetUser)) return false;
     return true;
   };
 
@@ -427,7 +437,7 @@ export default function UsersPage() {
             header: 'Actions',
             render: (user: User) => (
               <div className="flex items-center gap-2">
-                {canAssignRoles && (
+                {canManageUserRoles(user) && (
                   <IconActionButton
                     onClick={() => openRoleModal(user)}
                     icon={<Shield className="w-4 h-4" />}
@@ -443,18 +453,22 @@ export default function UsersPage() {
                     title={user.isActive !== false ? 'Deactivate User' : 'Activate User'}
                   />
                 )}
-                <IconActionButton
-                  onClick={() => openEditModal(user)}
-                  icon={<Pencil className="w-4 h-4" />}
-                  color="primary"
-                  title="Edit"
-                />
-                <IconActionButton
-                  onClick={() => openDeleteDialog(user)}
-                  icon={<Trash2 className="w-4 h-4" />}
-                  color="danger"
-                  title="Delete"
-                />
+                {canEditUser(user) && (
+                  <IconActionButton
+                    onClick={() => openEditModal(user)}
+                    icon={<Pencil className="w-4 h-4" />}
+                    color="primary"
+                    title="Edit"
+                  />
+                )}
+                {canDeleteUser(user) && (
+                  <IconActionButton
+                    onClick={() => openDeleteDialog(user)}
+                    icon={<Trash2 className="w-4 h-4" />}
+                    color="danger"
+                    title="Delete"
+                  />
+                )}
               </div>
             ),
           },
@@ -772,7 +786,7 @@ export default function UsersPage() {
         confirmText="Delete"
         isDestructive
         isLoading={isSubmitting}
-        error={error}
+        // error={error} // Uncomment for inline error display
       />
 
       {/* Status Change Confirmation */}

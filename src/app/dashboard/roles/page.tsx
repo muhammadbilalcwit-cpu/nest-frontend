@@ -1,30 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Table, PageHeader, Badge, getRoleVariant } from '@/components/ui';
-import { rolesApi } from '@/services/api';
+import { useRoles } from '@/hooks/queries';
 import { Shield } from 'lucide-react';
 import type { Role } from '@/types';
 
 export default function RolesPage() {
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    fetchRoles();
-  }, []);
-
-  const fetchRoles = async () => {
-    try {
-      const response = await rolesApi.getAll();
-      setRoles(response.data.data);
-    } catch (error) {
-      console.error('Failed to fetch roles:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data: roles = [], isLoading } = useRoles();
 
   // getRoleBadgeColor replaced by getRoleVariant helper from Badge component
 

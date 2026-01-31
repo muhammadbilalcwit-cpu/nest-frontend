@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/context/AuthContext';
+import { useAuthStore } from '@/stores/auth.store';
 import { isRouteAllowed } from '@/config/route-permissions';
 import { Button } from '@/components/ui';
 import { Sidebar } from './Sidebar';
@@ -17,7 +17,9 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, title }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const { isAuthenticated, isLoading, hasRole } = useAuth();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isLoading = useAuthStore((s) => s.isLoading);
+  const hasRole = useAuthStore((s) => s.hasRole);
   const router = useRouter();
   const pathname = usePathname();
 

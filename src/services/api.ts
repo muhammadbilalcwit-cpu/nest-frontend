@@ -22,17 +22,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 // Custom event for force logout (used when token refresh fails due to inactive user)
 export const FORCE_LOGOUT_EVENT = "force-logout";
 
-export const FORBIDDEN_EVENT = "forbidden-access";
-
 export const triggerForceLogout = () => {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(FORCE_LOGOUT_EVENT));
-  }
-};
-
-export const triggerForbidden = () => {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(FORBIDDEN_EVENT));
   }
 };
 
@@ -71,11 +63,8 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
-    // ✅ HANDLE 403 FIRST
-    if (error.response?.status === 403) {
-      triggerForbidden();
-      return Promise.reject(error);
-    }
+    // 403 errors are handled by individual components via toast messages
+    // Do NOT automatically redirect - let error handlers show appropriate messages
 
     // Only handle 401 errors
     if (error.response?.status !== 401) {
@@ -188,6 +177,17 @@ export const usersApi = {
 
   updateStatus: (id: number, isActive: boolean) =>
     api.patch<ApiResponse<User>>(`/users/${id}/status`, { isActive }),
+
+  // Avatar upload/delete for profile
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<ApiResponse<User>>("/users/profile/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  removeAvatar: () => api.delete<ApiResponse<User>>("/users/profile/avatar"),
 };
 
 // Companies endpoints

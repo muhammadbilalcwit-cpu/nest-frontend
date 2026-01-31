@@ -1,25 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
+import Image from 'next/image';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout';
-import { Alert, PageHeader, FormField, Button } from '@/components/ui';
-import { useAuth } from '@/context/AuthContext';
-import { usersApi } from '@/services/api';
+import { PageHeader, FormField, Button } from '@/components/ui';
+import { useAuthStore } from '@/stores/auth.store';
+import { useThemeStore } from '@/stores/theme.store';
 import {
-  User as UserIcon,
-  Lock,
-  Palette,
-} from 'lucide-react';
+  useUpdateProfile,
+  useUploadAvatar,
+  useRemoveAvatar,
+} from '@/hooks/mutations';
+import { getErrorMessage } from '@/lib/error-utils';
+import { User as UserIcon, Lock, Palette, Camera, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
+
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
 type SettingsTab = 'profile' | 'password' | 'notifications' | 'appearance';
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const user = useAuthStore((s) => s.user);
+  const fetchUser = useAuthStore((s) => s.fetchUser);
+  const { theme, setTheme } = useThemeStore();
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>('light');
+
+  const updateProfile = useUpdateProfile();
+  const uploadAvatar = useUploadAvatar();
+  const removeAvatar = useRemoveAvatar();
+
+  // File input ref for avatar upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Password form
   const [passwordData, setPasswordData] = useState({
@@ -34,64 +47,97 @@ export default function SettingsPage() {
     sound: false,
   });
 
-  useEffect(() => {
-    // Read theme from localStorage on mount
-    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
-    if (savedTheme) {
-      setCurrentTheme(savedTheme);
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setCurrentTheme('dark');
+  // Avatar upload handler
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (2MB max)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('File size must be less than 2MB');
+      return;
     }
-  }, []);
 
-  const handleThemeChange = (newTheme: 'light' | 'dark') => {
-    setCurrentTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.classList.toggle('dark', newTheme === 'dark');
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Only JPEG, PNG and WebP files are allowed');
+      return;
+    }
+
+    uploadAvatar.mutate(file, {
+      onSuccess: () => {
+        toast.success('Profile picture updated successfully');
+        // Refresh user data in auth store
+        fetchUser();
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, 'Failed to upload profile picture'));
+      },
+    });
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
-  const showMessage = (type: 'success' | 'error', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
+  // Avatar remove handler
+  const handleAvatarRemove = () => {
+    removeAvatar.mutate(undefined, {
+      onSuccess: () => {
+        toast.success('Profile picture removed successfully');
+        // Refresh user data in auth store
+        fetchUser();
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, 'Failed to remove profile picture'));
+      },
+    });
   };
 
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
+  // Get avatar URL
+  const getAvatarUrl = () => {
+    if (user?.profilePicture) {
+      return `${BACKEND_URL}${user.profilePicture}`;
+    }
+    return null;
+  };
+
+  const handlePasswordSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      showMessage('error', 'Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
     if (passwordData.newPassword.length < 6) {
-      showMessage('error', 'Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await usersApi.updateProfile({
+    updateProfile.mutate(
+      {
         password: passwordData.newPassword,
         currentPassword: passwordData.currentPassword,
-      });
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      showMessage('success', 'Password changed successfully');
-    } catch (error: unknown) {
-      console.error('Failed to change password:', error);
-      // Extract error message from API response
-      const axiosError = error as { response?: { data?: { message?: string } } };
-      const errorMessage = axiosError.response?.data?.message || 'Failed to change password';
-      showMessage('error', errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          toast.success('Password changed successfully');
+          setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, 'Failed to change password'));
+        },
+      }
+    );
   };
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'profile', label: 'Profile', icon: <UserIcon className="w-4 h-4" /> },
     { id: 'password', label: 'Password', icon: <Lock className="w-4 h-4" /> },
-    // { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" /> }, // Hidden until implemented
     { id: 'appearance', label: 'Appearance', icon: <Palette className="w-4 h-4" /> },
   ];
 
@@ -101,11 +147,6 @@ export default function SettingsPage() {
         title="Settings"
         subtitle="Manage your account settings and preferences"
       />
-
-      {/* Message Alert */}
-      {message && (
-        <Alert variant={message.type} message={message.text} className="mb-6" />
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Tabs */}
@@ -140,8 +181,72 @@ export default function SettingsPage() {
                     Profile Information
                   </h3>
                   <p className="text-sm text-slate-500 dark:text-dark-muted mb-6">
-                    Your personal information. Contact an administrator to update your profile details.
+                    Your personal information and profile picture.
                   </p>
+                </div>
+
+                {/* Avatar Section */}
+                <div className="flex items-center gap-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                  <div className="relative">
+                    <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                      {getAvatarUrl() ? (
+                        <Image
+                          src={getAvatarUrl()!}
+                          alt="Profile"
+                          width={96}
+                          height={96}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <UserIcon className="w-12 h-12 text-slate-400 dark:text-slate-500" />
+                      )}
+                    </div>
+                    {(uploadAvatar.isPending || removeAvatar.isPending) && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                        <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-slate-900 dark:text-white mb-1">
+                      Profile Picture
+                    </h4>
+                    <p className="text-sm text-slate-500 dark:text-dark-muted mb-3">
+                      JPG, PNG or WebP. Max size 2MB.
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="text-sm px-3 py-1.5"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadAvatar.isPending || removeAvatar.isPending}
+                        icon={<Camera className="w-4 h-4" />}
+                      >
+                        {user?.profilePicture ? 'Change' : 'Upload'}
+                      </Button>
+                      {user?.profilePicture && (
+                        <Button
+                          type="button"
+                          variant="danger"
+                          className="text-sm px-3 py-1.5"
+                          onClick={handleAvatarRemove}
+                          disabled={uploadAvatar.isPending || removeAvatar.isPending}
+                          icon={<Trash2 className="w-4 h-4" />}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <FormField
@@ -211,7 +316,7 @@ export default function SettingsPage() {
 
                 <Button
                   type="submit"
-                  isLoading={isSubmitting}
+                  isLoading={updateProfile.isPending}
                   loadingText="Changing..."
                   icon={<Lock className="w-4 h-4" />}
                 >
@@ -286,10 +391,10 @@ export default function SettingsPage() {
                   <label className="label mb-3">Theme</label>
                   <div className="grid grid-cols-2 gap-4">
                     <button
-                      onClick={() => handleThemeChange('light')}
+                      onClick={() => setTheme('light')}
                       className={clsx(
                         'p-4 rounded-lg border-2 transition-colors',
-                        currentTheme === 'light'
+                        theme === 'light'
                           ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                           : 'border-slate-200 dark:border-dark-border hover:border-slate-300'
                       )}
@@ -306,10 +411,10 @@ export default function SettingsPage() {
                     </button>
 
                     <button
-                      onClick={() => handleThemeChange('dark')}
+                      onClick={() => setTheme('dark')}
                       className={clsx(
                         'p-4 rounded-lg border-2 transition-colors',
-                        currentTheme === 'dark'
+                        theme === 'dark'
                           ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                           : 'border-slate-200 dark:border-dark-border hover:border-slate-300'
                       )}
@@ -326,15 +431,6 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </div>
-
-                {/* <div>
-                  <label className="label mb-3">Language</label>
-                  <select className="input w-auto">
-                    <option value="en">English</option>
-                    <option value="es" disabled>Spanish (Coming Soon)</option>
-                    <option value="fr" disabled>French (Coming Soon)</option>
-                  </select>
-                </div> */}
               </div>
             )}
           </div>

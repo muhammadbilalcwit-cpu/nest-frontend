@@ -1,70 +1,32 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout';
 import { Table, Modal, ConfirmDialog, PageHeader, FormField, FormTextarea, Button, IconActionButton, ModalFooter } from '@/components/ui';
-import { useAuth } from '@/context/AuthContext';
-import { companiesApi } from '@/services/api';
-import { subscribeToNotifications } from '@/services/socket';
+import { useAuthStore } from '@/stores/auth.store';
+import { useCompanies } from '@/hooks/queries';
+import { useCreateCompany, useUpdateCompany, useDeleteCompany } from '@/hooks/mutations';
+import { getErrorMessage } from '@/lib/error-utils';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
-import type { Company, NotificationPayload } from '@/types';
+import type { Company } from '@/types';
 
 export default function CompaniesPage() {
-  const { hasRole } = useAuth();
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const { data: companies = [], isLoading } = useCompanies();
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    address: '',
-  });
-  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ name: '', address: '' });
+  // const [error, setError] = useState<string | null>(null); // Uncomment for inline error display
+
+  const createCompany = useCreateCompany();
+  const updateCompany = useUpdateCompany();
+  const deleteCompany = useDeleteCompany();
 
   const canManage = hasRole('super_admin');
-
-  const fetchCompanies = useCallback(async () => {
-    try {
-      const response = await companiesApi.getAll();
-      setCompanies(response.data.data);
-    } catch (error) {
-      console.error('Failed to fetch companies:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCompanies();
-  }, [fetchCompanies]);
-
-  // Subscribe to real-time notifications for company changes
-  useEffect(() => {
-    const unsubscribe = subscribeToNotifications(
-      (notification: NotificationPayload) => {
-        // Refresh data when company-related events occur
-        const companyEvents = [
-          'company:created',
-          'company:updated',
-          'company:deleted',
-        ];
-
-        if (companyEvents.includes(notification.type)) {
-          console.log(
-            'Real-time update: Refreshing companies data',
-            notification.type
-          );
-          fetchCompanies();
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [fetchCompanies]);
+  const isSubmitting = createCompany.isPending || updateCompany.isPending || deleteCompany.isPending;
 
   const openCreateModal = () => {
     setSelectedCompany(null);
@@ -74,54 +36,59 @@ export default function CompaniesPage() {
 
   const openEditModal = (company: Company) => {
     setSelectedCompany(company);
-    setFormData({
-      name: company.name,
-      address: company.address || '',
-    });
+    setFormData({ name: company.name, address: company.address || '' });
     setIsModalOpen(true);
   };
 
   const openDeleteDialog = (company: Company) => {
     setSelectedCompany(company);
-    setError(null);
+    // setError(null); // Uncomment for inline error display
     setIsDeleteDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    try {
-      if (selectedCompany) {
-        await companiesApi.update(selectedCompany.id, formData);
-      } else {
-        await companiesApi.create(formData);
-      }
-      setIsModalOpen(false);
-      fetchCompanies();
-    } catch (error) {
-      console.error('Failed to save company:', error);
-    } finally {
-      setIsSubmitting(false);
+    if (selectedCompany) {
+      updateCompany.mutate(
+        { id: selectedCompany.id, data: formData },
+        {
+          onSuccess: () => {
+            toast.success('Company updated successfully');
+            setIsModalOpen(false);
+          },
+          onError: (err) => {
+            toast.error(getErrorMessage(err, 'Failed to update company'));
+          },
+        }
+      );
+    } else {
+      createCompany.mutate(formData, {
+        onSuccess: () => {
+          toast.success('Company created successfully');
+          setIsModalOpen(false);
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, 'Failed to create company'));
+        },
+      });
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!selectedCompany) return;
-    setIsSubmitting(true);
-    setError(null);
+    // setError(null); // Uncomment for inline error display
 
-    try {
-      await companiesApi.delete(selectedCompany.id);
-      setIsDeleteDialogOpen(false);
-      fetchCompanies();
-    } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      const message = axiosError.response?.data?.message || 'Failed to delete company';
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    deleteCompany.mutate(selectedCompany.id, {
+      onSuccess: () => {
+        toast.success('Company deleted successfully');
+        setIsDeleteDialogOpen(false);
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, 'Failed to delete company'));
+        // setError(getErrorMessage(err, 'Failed to delete company')); // Uncomment for inline error display
+      },
+    });
   };
 
   const columns = [
@@ -221,7 +188,7 @@ export default function CompaniesPage() {
         confirmText="Delete"
         isDestructive
         isLoading={isSubmitting}
-        error={error}
+        // error={error} // Uncomment for inline error display
       />
     </DashboardLayout>
   );

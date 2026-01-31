@@ -4,6 +4,7 @@ export interface User {
   firstname?: string;
   lastname?: string;
   age?: number;
+  profilePicture?: string | null;
   role?: Role | string;
   roles?: (Role | string)[];
   department?: Department;
@@ -229,4 +230,55 @@ export interface CompanyUsersDetailResponse {
   totalUsers: number;
   onlineCount: number;
   offlineCount: number;
+}
+
+// ─── Mutation Input Types ─────────────────────────────────────────────────────
+
+export interface CreateUserInput {
+  email: string;
+  password: string;
+  firstname?: string;
+  lastname?: string;
+  departmentId?: number;
+  companyId?: number;
+  roleSlug?: string;
+}
+
+export interface UpdateUserInput {
+  firstname?: string;
+  lastname?: string;
+  password?: string;
+  departmentId?: number;
+  roleSlug?: string;
+}
+
+export interface UpdateProfileInput {
+  firstname?: string;
+  lastname?: string;
+  password?: string;
+  currentPassword?: string;
+}
+
+export interface CreateDepartmentInput {
+  name: string;
+  companyId: number;
+}
+
+export interface UpdateInput<T> {
+  id: number;
+  data: Partial<T>;
+}
+
+export interface RevokeCompanySessionInput {
+  companyId: number;
+  sessionId: number;
+}
+
+// ─── Query Parameter Types ────────────────────────────────────────────────────
+
+export interface ActivityLogsParams {
+  page?: number;
+  limit?: number;
+  method?: string;
+  search?: string;
 }

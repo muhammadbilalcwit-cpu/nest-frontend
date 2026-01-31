@@ -1,105 +1,32 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { DashboardLayout } from '@/components/layout';
 import { StatsCard, PageHeader, EmptyState, QuickActionCard } from '@/components/ui';
-import { useAuth } from '@/context/AuthContext';
-import { companiesApi, departmentsApi, usersApi } from '@/services/api';
-import { subscribeToNotifications } from '@/services/socket';
+import { useAuthStore } from '@/stores/auth.store';
+import { useCompanies, useDepartments, useUsers } from '@/hooks/queries';
 import { Building, FolderTree, Users, Activity } from 'lucide-react';
-import type { Company, Department, User, NotificationPayload } from '@/types';
 
 export default function DashboardPage() {
-  const { primaryRole, user } = useAuth();
-  const [stats, setStats] = useState({
-    companies: 0,
-    departments: 0,
-    users: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  const primaryRole = useAuthStore((s) => s.primaryRole);
+  const user = useAuthStore((s) => s.user);
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const promises: Promise<unknown>[] = [];
+  const isSuperAdmin = primaryRole === 'super_admin';
+  const isCompanyAdmin = primaryRole === 'company_admin';
+  const isManager = primaryRole === 'manager';
 
-      if (primaryRole === 'super_admin') {
-        promises.push(
-          companiesApi.getAll().then((res) => res.data.data),
-          departmentsApi.getAll().then((res) => res.data.data),
-          usersApi.getAll().then((res) => res.data.data)
-        );
+  // Fetch data based on role
+  const { data: companies = [] } = useCompanies(isSuperAdmin);
+  const { data: departments = [], isLoading: deptsLoading } = useDepartments();
+  const { data: users = [], isLoading: usersLoading } = useUsers();
 
-        const [companies, departments, users] = await Promise.all(promises) as [Company[], Department[], User[]];
-        setStats({
-          companies: companies.length,
-          departments: departments.length,
-          users: users.length,
-        });
-      } else if (primaryRole === 'company_admin' || primaryRole === 'manager') {
-        const [departments, users] = await Promise.all([
-          departmentsApi.getAll().then((res) => res.data.data),
-          usersApi.getAll().then((res) => res.data.data),
-        ]) as [Department[], User[]];
+  const isLoading = deptsLoading || usersLoading;
 
-        setStats({
-          companies: 1, // Their own company
-          departments: departments.length,
-          users: users.length,
-        });
-      } else {
-        // Regular user
-        setStats({
-          companies: 0,
-          departments: 0,
-          users: 0,
-        });
-      }
-
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [primaryRole]);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
-
-  // Subscribe to real-time notifications for stats updates
-  useEffect(() => {
-    const unsubscribe = subscribeToNotifications(
-      (notification: NotificationPayload) => {
-        // Refresh stats when any entity changes
-        const relevantEvents = [
-          'company:created',
-          'company:updated',
-          'company:deleted',
-          'department:created',
-          'department:updated',
-          'department:deleted',
-          'user:created',
-          'user:updated',
-          'user:deleted',
-          'user:activated',
-          'user:deactivated',
-        ];
-
-        if (relevantEvents.includes(notification.type)) {
-          console.log(
-            'Real-time update: Refreshing dashboard stats',
-            notification.type
-          );
-          fetchStats();
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [fetchStats]);
+  const stats = {
+    companies: isSuperAdmin ? companies.length : (isCompanyAdmin || isManager ? 1 : 0),
+    departments: isSuperAdmin || isCompanyAdmin || isManager ? departments.length : 0,
+    users: isSuperAdmin || isCompanyAdmin || isManager ? users.length : 0,
+  };
 
   const getWelcomeMessage = () => {
     const name = user?.firstname || user?.email?.split('@')[0] || 'User';

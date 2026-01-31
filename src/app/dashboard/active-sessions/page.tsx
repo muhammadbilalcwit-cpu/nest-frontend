@@ -1,10 +1,24 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout";
 import { Alert, PageHeader, Button, LoadingSpinner, StatsCard } from "@/components/ui";
-import { useAuth } from "@/context/AuthContext";
-import { activeSessionsApi } from "@/services/api";
+import { useAuthStore } from "@/stores/auth.store";
+import { getErrorMessage } from "@/lib/error-utils";
+import {
+  useCompaniesStatus,
+  useOnlineUsersWithSessions,
+  useCompanyUsersWithSessions,
+} from "@/hooks/queries";
+import {
+  useRevokeSpecificSession,
+  useRevokeSpecificSessionForCompany,
+  useRevokeAllUserSessions,
+  useRevokeAllSessions,
+  useRevokeAllSessionsForCompany,
+} from "@/hooks/mutations";
 import {
   subscribeToUserStatusChanged,
   subscribeToSessionAdded,
@@ -26,14 +40,7 @@ import {
   ChevronUp,
   X,
 } from "lucide-react";
-import type {
-  OnlineUserWithSessions,
-  SessionDetails,
-  UserStatusPayload,
-  SessionAddedPayload,
-  SessionRemovedPayload,
-  CompanyStatus,
-} from "@/types";
+import type { SessionDetails, CompanyStatus, OnlineUserWithSessions } from "@/types";
 import clsx from "clsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -88,41 +95,78 @@ const formatTimeAgo = (dateString: string) => {
 };
 
 export default function ActiveSessionsPage() {
-  const { hasRole, user: currentUser } = useAuth();
-  const isSuperAdmin = hasRole(["super_admin"]);
-  // Company-level state (for super_admin)
-  const [companies, setCompanies] = useState<CompanyStatus[]>([]);
-  const [globalStats, setGlobalStats] = useState({
-    totalCompanies: 0,
-    totalUsers: 0,
-    totalOnline: 0,
-    totalOffline: 0,
-  });
+  const queryClient = useQueryClient();
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const currentUser = useAuthStore((s) => s.user);
+  const isSuperAdmin = hasRole("super_admin");
+  const isCompanyAdmin = hasRole("company_admin");
+
+  // Navigation state for super admin drill-down
   const [selectedCompany, setSelectedCompany] = useState<{
     id: number;
     name: string;
   } | null>(null);
 
-  // User-level state (only online users with sessions)
-  const [users, setUsers] = useState<OnlineUserWithSessions[]>([]);
-  const [stats, setStats] = useState({
-    onlineUsers: 0,
-    totalSessions: 0,
-  });
-
   // UI state
   const [expandedUsers, setExpandedUsers] = useState<Set<number>>(new Set());
-  const [isLoading, setIsLoading] = useState(true);
-  const [revokingSession, setRevokingSession] = useState<number | null>(null);
-  const [revokingUser, setRevokingUser] = useState<number | null>(null);
   const [showRevokeAllConfirm, setShowRevokeAllConfirm] = useState(false);
-  const [revokingAll, setRevokingAll] = useState(false);
-  const [confirmRevokeSession, setConfirmRevokeSession] = useState<
-    number | null
-  >(null);
-  const [confirmRevokeUser, setConfirmRevokeUser] = useState<number | null>(
-    null,
-  );
+  const [confirmRevokeSession, setConfirmRevokeSession] = useState<number | null>(null);
+  const [confirmRevokeUser, setConfirmRevokeUser] = useState<number | null>(null);
+
+  // Query hooks - only enable queries based on user role
+  // Super admin: uses companiesQuery first, then companyUsersQuery when drilling down
+  // Company admin: uses usersQuery directly
+  const companiesQuery = useCompaniesStatus(isSuperAdmin);
+  const usersQuery = useOnlineUsersWithSessions(isCompanyAdmin && !isSuperAdmin);
+  const companyUsersQuery = useCompanyUsersWithSessions(selectedCompany?.id ?? 0);
+
+  // Mutation hooks
+  const revokeSession = useRevokeSpecificSession();
+  const revokeSessionForCompany = useRevokeSpecificSessionForCompany();
+  const revokeAllUserSessions = useRevokeAllUserSessions();
+  const revokeAllSessions = useRevokeAllSessions();
+  const revokeAllSessionsForCompany = useRevokeAllSessionsForCompany();
+
+  // Determine which data/loading state to use based on view
+  const isCompanyListView = isSuperAdmin && !selectedCompany;
+  const isLoading = isCompanyListView
+    ? companiesQuery.isLoading
+    : selectedCompany
+      ? companyUsersQuery.isLoading
+      : usersQuery.isLoading;
+
+  // Get data based on view
+  const companies = companiesQuery.data?.companies ?? [];
+  const globalStats = {
+    totalCompanies: companiesQuery.data?.totalCompanies ?? 0,
+    totalUsers: companiesQuery.data?.totalUsers ?? 0,
+    totalOnline: companiesQuery.data?.totalOnline ?? 0,
+    totalOffline: companiesQuery.data?.totalOffline ?? 0,
+  };
+
+  const usersData = selectedCompany ? companyUsersQuery.data : usersQuery.data;
+  const users = usersData?.users ?? [];
+  const stats = {
+    onlineUsers: usersData?.onlineUsers ?? 0,
+    totalSessions: usersData?.totalSessions ?? 0,
+  };
+
+  // Socket subscriptions - invalidate queries on events
+  useEffect(() => {
+    const invalidateAll = () => {
+      queryClient.invalidateQueries({ queryKey: ['activeSessions'] });
+    };
+
+    const unsubscribeUserStatus = subscribeToUserStatusChanged(invalidateAll);
+    const unsubscribeSessionAdded = subscribeToSessionAdded(invalidateAll);
+    const unsubscribeSessionRemoved = subscribeToSessionRemoved(invalidateAll);
+
+    return () => {
+      unsubscribeUserStatus();
+      unsubscribeSessionAdded();
+      unsubscribeSessionRemoved();
+    };
+  }, [queryClient]);
 
   // Toggle expanded user
   const toggleUserExpanded = (userId: number) => {
@@ -137,338 +181,88 @@ export default function ActiveSessionsPage() {
     });
   };
 
-  // Fetch companies for super_admin
-  const fetchCompanies = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await activeSessionsApi.getAllCompaniesStatus();
-      setCompanies(response.data.data.companies);
-      setGlobalStats({
-        totalCompanies: response.data.data.totalCompanies,
-        totalUsers: response.data.data.totalUsers,
-        totalOnline: response.data.data.totalOnline,
-        totalOffline: response.data.data.totalOffline,
-      });
-    } catch (error) {
-      console.error("Failed to fetch companies status:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Fetch online users with sessions for company_admin
-  const fetchUsers = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await activeSessionsApi.getOnlineUsersWithSessions();
-      setUsers(response.data.data.users);
-      setStats({
-        onlineUsers: response.data.data.onlineUsers,
-        totalSessions: response.data.data.totalSessions,
-      });
-    } catch (error) {
-      console.error("Failed to fetch online users:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Fetch online users with sessions for super_admin drill-down
-  const fetchCompanyUsers = useCallback(async (companyId: number) => {
-    setIsLoading(true);
-    try {
-      const response =
-        await activeSessionsApi.getCompanyUsersWithSessions(companyId);
-      setUsers(response.data.data.users);
-      setStats({
-        onlineUsers: response.data.data.onlineUsers,
-        totalSessions: response.data.data.totalSessions,
-      });
-    } catch (error) {
-      console.error("Failed to fetch company users:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Handle real-time user status changes
-  const handleUserStatusChange = useCallback(
-    (payload: UserStatusPayload) => {
-      // For user going offline, remove from list
-      if (!payload.isOnline) {
-        // Only update if relevant to current view
-        if (!isSuperAdmin || selectedCompany) {
-          if (!selectedCompany || selectedCompany.id === payload.companyId) {
-            setUsers((prev) => prev.filter((u) => u.id !== payload.userId));
-            setStats((prev) => ({
-              onlineUsers: Math.max(0, prev.onlineUsers - 1),
-              totalSessions: prev.totalSessions, // Will be updated on refresh
-            }));
-          }
-        }
-      } else {
-        // User came online - refresh to get their sessions
-        if (!isSuperAdmin || selectedCompany) {
-          if (!selectedCompany || selectedCompany.id === payload.companyId) {
-            // Refresh to get the new user's sessions
-            if (selectedCompany) {
-              fetchCompanyUsers(selectedCompany.id);
-            } else {
-              fetchUsers();
-            }
-          }
-        }
-      }
-
-      // Update company-level stats for super_admin
-      if (isSuperAdmin) {
-        setGlobalStats((prev) => {
-          if (payload.isOnline) {
-            return {
-              ...prev,
-              totalOnline: prev.totalOnline + 1,
-              totalOffline: Math.max(0, prev.totalOffline - 1),
-            };
-          } else {
-            return {
-              ...prev,
-              totalOnline: Math.max(0, prev.totalOnline - 1),
-              totalOffline: prev.totalOffline + 1,
-            };
-          }
-        });
-
-        setCompanies((prevCompanies) =>
-          prevCompanies.map((company) => {
-            if (company.id === payload.companyId) {
-              if (payload.isOnline) {
-                return {
-                  ...company,
-                  onlineCount: company.onlineCount + 1,
-                  offlineCount: Math.max(0, company.offlineCount - 1),
-                };
-              } else {
-                return {
-                  ...company,
-                  onlineCount: Math.max(0, company.onlineCount - 1),
-                  offlineCount: company.offlineCount + 1,
-                };
-              }
-            }
-            return company;
-          }),
-        );
-      }
-    },
-    [isSuperAdmin, selectedCompany, fetchCompanyUsers, fetchUsers],
-  );
-
-  // Handle real-time session added events
-  const handleSessionAdded = useCallback(
-    (payload: SessionAddedPayload) => {
-      // Only update if relevant to current view
-      if (isSuperAdmin && !selectedCompany) {
-        // On company list view, we don't need to update individual sessions
-        return;
-      }
-
-      // Check if this session is for the company we're viewing
-      if (selectedCompany && selectedCompany.id !== payload.companyId) {
-        return;
-      }
-
-      // For company_admin without selectedCompany, always update
-      setUsers((prevUsers) => {
-        // Find if user already exists
-        const existingUserIndex = prevUsers.findIndex(
-          (u) => u.id === payload.userId,
-        );
-
-        const newSession: SessionDetails = {
-          id: payload.sessionId,
-          browser: payload.browser,
-          os: payload.os,
-          ipAddress: payload.ipAddress,
-          loginAt: payload.loginAt,
-          lastActivityAt: payload.lastActivityAt,
-        };
-
-        if (existingUserIndex >= 0) {
-          // User exists, add session to their list
-          const updatedUsers = [...prevUsers];
-          const existingUser = updatedUsers[existingUserIndex];
-
-          // Check if session already exists (avoid duplicates)
-          if (existingUser.sessions.some((s) => s.id === payload.sessionId)) {
-            return prevUsers;
-          }
-
-          updatedUsers[existingUserIndex] = {
-            ...existingUser,
-            sessions: [newSession, ...existingUser.sessions],
-          };
-          return updatedUsers;
-        } else {
-          // User doesn't exist, add new user with this session
-          const newUser: OnlineUserWithSessions = {
-            id: payload.userId,
-            email: payload.email,
-            firstname: payload.firstname,
-            lastname: payload.lastname,
-            sessions: [newSession],
-          };
-          return [newUser, ...prevUsers];
-        }
-      });
-
-      // Update stats
-      setStats((prev) => ({
-        onlineUsers: prev.onlineUsers, // Will be recalculated based on users
-        totalSessions: prev.totalSessions + 1,
-      }));
-    },
-    [isSuperAdmin, selectedCompany],
-  );
-
-  // Handle real-time session removed events
-  const handleSessionRemoved = useCallback(
-    (payload: SessionRemovedPayload) => {
-      // Only update if relevant to current view
-      if (isSuperAdmin && !selectedCompany) {
-        // On company list view, we don't need to update individual sessions
-        return;
-      }
-
-      // Check if this session is for the company we're viewing
-      if (selectedCompany && selectedCompany.id !== payload.companyId) {
-        return;
-      }
-
-      setUsers((prevUsers) => {
-        return prevUsers
-          .map((user) => {
-            if (user.id === payload.userId) {
-              const updatedSessions = user.sessions.filter(
-                (s) => s.id !== payload.sessionId,
-              );
-              return { ...user, sessions: updatedSessions };
-            }
-            return user;
-          })
-          .filter((user) => user.sessions.length > 0); // Remove users with no sessions
-      });
-
-      // Update stats
-      setStats((prev) => ({
-        onlineUsers: prev.onlineUsers, // Will be recalculated
-        totalSessions: Math.max(0, prev.totalSessions - 1),
-      }));
-    },
-    [isSuperAdmin, selectedCompany],
-  );
-
-  // Effect for fetching data based on view state
-  useEffect(() => {
-    if (isSuperAdmin && !selectedCompany) {
-      fetchCompanies();
-    } else if (isSuperAdmin && selectedCompany) {
-      fetchCompanyUsers(selectedCompany.id);
+  // Refresh handlers
+  const handleRefresh = () => {
+    if (isCompanyListView) {
+      companiesQuery.refetch();
+    } else if (selectedCompany) {
+      companyUsersQuery.refetch();
     } else {
-      fetchUsers();
+      usersQuery.refetch();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSuperAdmin, selectedCompany?.id]);
-
-  // Effect for real-time updates subscription
-  useEffect(() => {
-    const unsubscribeUserStatus = subscribeToUserStatusChanged(
-      handleUserStatusChange,
-    );
-    const unsubscribeSessionAdded = subscribeToSessionAdded(handleSessionAdded);
-    const unsubscribeSessionRemoved =
-      subscribeToSessionRemoved(handleSessionRemoved);
-
-    return () => {
-      unsubscribeUserStatus();
-      unsubscribeSessionAdded();
-      unsubscribeSessionRemoved();
-    };
-  }, [handleUserStatusChange, handleSessionAdded, handleSessionRemoved]);
+  };
 
   // Revoke a specific session
-  const handleRevokeSession = async (sessionId: number) => {
-    setRevokingSession(sessionId);
-    try {
-      if (isSuperAdmin && selectedCompany) {
-        await activeSessionsApi.revokeSpecificSessionForCompany(
-          selectedCompany.id,
-          sessionId,
-        );
-        await fetchCompanyUsers(selectedCompany.id);
-      } else {
-        await activeSessionsApi.revokeSpecificSession(sessionId);
-        await fetchUsers();
-      }
-      setConfirmRevokeSession(null);
-    } catch (error) {
-      console.error("Failed to revoke session:", error);
-    } finally {
-      setRevokingSession(null);
+  const handleRevokeSession = (sessionId: number) => {
+    const mutationOptions = {
+      onSuccess: () => {
+        toast.success("Session revoked successfully");
+        setConfirmRevokeSession(null);
+      },
+      onError: (err: unknown) => {
+        toast.error(getErrorMessage(err, "Failed to revoke session"));
+      },
+    };
+
+    if (isSuperAdmin && selectedCompany) {
+      revokeSessionForCompany.mutate(
+        { companyId: selectedCompany.id, sessionId },
+        mutationOptions
+      );
+    } else {
+      revokeSession.mutate(sessionId, mutationOptions);
     }
   };
 
   // Revoke all sessions for a user
-  const handleRevokeAllUserSessions = async (userId: number) => {
-    setRevokingUser(userId);
-    try {
-      await activeSessionsApi.revokeAllUserSessions(userId);
-      if (selectedCompany) {
-        await fetchCompanyUsers(selectedCompany.id);
-      } else {
-        await fetchUsers();
-      }
-      setConfirmRevokeUser(null);
-    } catch (error) {
-      console.error("Failed to revoke user sessions:", error);
-    } finally {
-      setRevokingUser(null);
-    }
+  const handleRevokeAllUserSessions = (userId: number) => {
+    revokeAllUserSessions.mutate(userId, {
+      onSuccess: () => {
+        toast.success("All user sessions revoked successfully");
+        setConfirmRevokeUser(null);
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, "Failed to revoke user sessions"));
+      },
+    });
   };
 
   // Revoke all sessions in company
-  const handleRevokeAllSessions = async () => {
-    setRevokingAll(true);
-    try {
-      if (isSuperAdmin && selectedCompany) {
-        await activeSessionsApi.revokeAllSessionsForCompany(selectedCompany.id);
-        await fetchCompanyUsers(selectedCompany.id);
-      } else {
-        await activeSessionsApi.revokeAllSessions();
-        await fetchUsers();
-      }
-      setShowRevokeAllConfirm(false);
-    } catch (error) {
-      console.error("Failed to revoke all sessions:", error);
-    } finally {
-      setRevokingAll(false);
+  const handleRevokeAllSessions = () => {
+    const mutationOptions = {
+      onSuccess: () => {
+        toast.success("All sessions revoked successfully");
+        setShowRevokeAllConfirm(false);
+      },
+      onError: (err: unknown) => {
+        toast.error(getErrorMessage(err, "Failed to revoke all sessions"));
+      },
+    };
+
+    if (isSuperAdmin && selectedCompany) {
+      revokeAllSessionsForCompany.mutate(selectedCompany.id, mutationOptions);
+    } else {
+      revokeAllSessions.mutate(undefined, mutationOptions);
     }
   };
 
   const handleBackToCompanies = () => {
     setSelectedCompany(null);
-    setUsers([]);
-    setStats({ onlineUsers: 0, totalSessions: 0 });
     setExpandedUsers(new Set());
     setShowRevokeAllConfirm(false);
   };
 
+  // Check if any mutation is pending
+  const isRevokingSession = revokeSession.isPending || revokeSessionForCompany.isPending;
+  const isRevokingUser = revokeAllUserSessions.isPending;
+  const isRevokingAll = revokeAllSessions.isPending || revokeAllSessionsForCompany.isPending;
+
   // Render session row
   const renderSessionRow = (
     session: SessionDetails,
-    userId: number,
     isCurrentUser: boolean,
   ) => {
-    const isRevoking = revokingSession === session.id;
+    const isRevoking = isRevokingSession && confirmRevokeSession === session.id;
     const showingConfirm = confirmRevokeSession === session.id;
 
     return (
@@ -527,7 +321,7 @@ export default function ActiveSessionsPage() {
     const isExpanded = expandedUsers.has(user.id);
     const isCurrentUser = currentUser?.id === user.id;
     const showingConfirm = confirmRevokeUser === user.id;
-    const isRevoking = revokingUser === user.id;
+    const isRevoking = isRevokingUser && confirmRevokeUser === user.id;
 
     return (
       <div key={user.id} className="card mb-3 overflow-hidden">
@@ -607,7 +401,7 @@ export default function ActiveSessionsPage() {
         {isExpanded && user.sessions.length > 0 && (
           <div className="px-4 pb-4 space-y-2 border-t border-slate-100 dark:border-slate-700 pt-3">
             {user.sessions.map((session) =>
-              renderSessionRow(session, user.id, isCurrentUser),
+              renderSessionRow(session, isCurrentUser),
             )}
           </div>
         )}
@@ -664,7 +458,7 @@ export default function ActiveSessionsPage() {
   );
 
   // Super Admin - Company List View
-  if (isSuperAdmin && !selectedCompany) {
+  if (isCompanyListView) {
     return (
       <DashboardLayout title="Active Sessions">
         <PageHeader
@@ -673,7 +467,7 @@ export default function ActiveSessionsPage() {
           actions={
             <Button
               variant="secondary"
-              onClick={fetchCompanies}
+              onClick={() => companiesQuery.refetch()}
               disabled={isLoading}
               icon={<RefreshCw className={clsx("w-4 h-4", isLoading && "animate-spin")} />}
             >
@@ -687,22 +481,6 @@ export default function ActiveSessionsPage() {
           <StatsCard title="Companies" value={globalStats.totalCompanies} icon={<Building className="w-6 h-6" />} color="primary" />
           <StatsCard title="Total Users" value={globalStats.totalUsers} icon={<Users className="w-6 h-6" />} color="primary" />
           <StatsCard title="Online Now" value={globalStats.totalOnline} icon={<Wifi className="w-6 h-6" />} color="success" />
-
-          {/* <div className="card p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700">
-                <Users className="w-5 h-5 text-slate-400" />
-              </div>
-              <div>
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Offline
-                </p>
-                <p className="text-2xl font-bold text-slate-600 dark:text-slate-300">
-                  {globalStats.totalOffline}
-                </p>
-              </div>
-            </div>
-          </div> */}
         </div>
 
         {/* Companies List */}
@@ -740,11 +518,7 @@ export default function ActiveSessionsPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="secondary"
-              onClick={() =>
-                selectedCompany
-                  ? fetchCompanyUsers(selectedCompany.id)
-                  : fetchUsers()
-              }
+              onClick={handleRefresh}
               disabled={isLoading}
               icon={<RefreshCw className={clsx("w-4 h-4", isLoading && "animate-spin")} />}
             >
@@ -755,7 +529,7 @@ export default function ActiveSessionsPage() {
               <Button
                 variant="danger"
                 onClick={() => setShowRevokeAllConfirm(true)}
-                disabled={revokingAll}
+                disabled={isRevokingAll}
                 icon={<ShieldOff className="w-4 h-4" />}
               >
                 Revoke All
@@ -767,7 +541,7 @@ export default function ActiveSessionsPage() {
                 <Button
                   variant="danger"
                   onClick={handleRevokeAllSessions}
-                  isLoading={revokingAll}
+                  isLoading={isRevokingAll}
                   loadingText="Revoking..."
                 >
                   Confirm Revoke All

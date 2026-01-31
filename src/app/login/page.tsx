@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext';
+import { useAuthStore, flashErrorStorage } from '@/stores/auth.store';
 import { Alert, FormField, Button } from '@/components/ui';
 import { Building2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
@@ -19,22 +18,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [flashMessage, setFlashMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useAuth();
-  const router = useRouter();
+  const [flashMessage, setFlashMessage] = useState('');
 
-  // Read flash message from sessionStorage on mount and clear it (flash behavior)
+  const login = useAuthStore((s) => s.login);
+
+  // Read flash error from sessionStorage on mount
   useEffect(() => {
-    const errorCode = sessionStorage.getItem('flash_error');
-
+    const errorCode = flashErrorStorage.get();
     if (errorCode) {
-      // Set flash message based on error code
-      const message = FLASH_MESSAGES[errorCode] || 'An error occurred. Please log in again.';
-      setFlashMessage(message);
-
-      // Clear sessionStorage immediately (flash = show once)
-      sessionStorage.removeItem('flash_error');
+      setFlashMessage(
+        FLASH_MESSAGES[errorCode] || 'An error occurred. Please log in again.'
+      );
+      flashErrorStorage.clear(); // Clear after reading
     }
   }, []);
 
@@ -46,11 +42,10 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/dashboard');
+      // Redirect is handled reactively via useAuthRedirect hook
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
       setError(error.response?.data?.message || 'Invalid credentials');
-    } finally {
       setIsSubmitting(false);
     }
   };

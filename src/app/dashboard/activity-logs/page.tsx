@@ -1,61 +1,61 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout';
 import { Table, PageHeader, Badge, getMethodVariant, Button, Pagination, FormField, FormSelect } from '@/components/ui';
-import { activityLogsApi } from '@/services/api';
-import { Filter, RefreshCw } from 'lucide-react';
-import type { ActivityLog, PaginationMeta } from '@/types';
+import { useActivityLogs } from '@/hooks/queries';
+import { Filter, RefreshCw, X } from 'lucide-react';
+import type { ActivityLog } from '@/types';
 
-export default function ActivityLogsPage() {
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [meta, setMeta] = useState<PaginationMeta>({
-    total: 0,
-    page: 1,
-    limit: 8,
-    totalPages: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState({
-    method: '',
-    search: '',
-  });
-
-  const fetchLogs = useCallback(async (page = 1) => {
-    setIsLoading(true);
-    try {
-      const response = await activityLogsApi.getAll({
-        page,
-        limit: 8,
-        method: filter.method || undefined,
-        search: filter.search || undefined,
-      });
-      setLogs(response.data.data.data);
-      setMeta(response.data.data.meta);
-    } catch (error) {
-      console.error('Failed to fetch activity logs:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filter.method, filter.search]);
+// Custom hook for debouncing values
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
   useEffect(() => {
-    fetchLogs(1);
-  }, [fetchLogs]);
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+export default function ActivityLogsPage() {
+  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [methodFilter, setMethodFilter] = useState('');
+
+  // Debounce search input (300ms delay)
+  const debouncedSearch = useDebounce(searchInput, 300);
+
+  // Build params object only with defined values for proper cache key comparison
+  const queryParams = {
+    page,
+    limit: 8,
+    ...(methodFilter && { method: methodFilter }),
+    ...(debouncedSearch && { search: debouncedSearch }),
+  };
+
+  const { data, isLoading, refetch } = useActivityLogs(queryParams);
+
+  const logs = data?.data || [];
+  const meta = data?.meta || { total: 0, page: 1, limit: 8, totalPages: 0 };
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, methodFilter]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= meta.totalPages) {
-      fetchLogs(newPage);
+      setPage(newPage);
     }
   };
 
-  const handleFilterChange = (key: 'method' | 'search', value: string) => {
-    setFilter((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleApplyFilters = () => {
-    fetchLogs(1);
-  };
+  const handleClearFilters = useCallback(() => {
+    setSearchInput('');
+    setMethodFilter('');
+    setPage(1);
+  }, []);
 
   // getMethodBadge replaced by Badge component with getMethodVariant helper
 
@@ -96,7 +96,7 @@ export default function ActivityLogsPage() {
         title="Activity Logs"
         subtitle="Monitor user activity in your organization"
         actions={
-          <Button variant="secondary" onClick={() => fetchLogs(meta.page)} icon={<RefreshCw className="w-4 h-4" />}>
+          <Button variant="secondary" onClick={() => refetch()} icon={<RefreshCw className="w-4 h-4" />}>
             Refresh
           </Button>
         }
@@ -113,16 +113,15 @@ export default function ActivityLogsPage() {
           <div className="flex-1">
             <FormField
               type="text"
-              value={filter.search}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search by user, endpoint, or reason..."
             />
           </div>
 
           <FormSelect
-            value={filter.method}
-            onChange={(e) => handleFilterChange('method', e.target.value)}
+            value={methodFilter}
+            onChange={(e) => setMethodFilter(e.target.value)}
             className="w-auto"
             options={[
               { value: 'GET', label: 'GET' },
@@ -134,9 +133,11 @@ export default function ActivityLogsPage() {
             placeholder="All Methods"
           />
 
-          <Button onClick={handleApplyFilters}>
-            Apply
-          </Button>
+          {(searchInput || methodFilter) && (
+            <Button variant="secondary" onClick={handleClearFilters} icon={<X className="w-4 h-4" />}>
+              Clear
+            </Button>
+          )}
         </div>
       </div>
 

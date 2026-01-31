@@ -1,157 +1,116 @@
-"use client";
+'use client';
 
-import { useEffect, useState, useCallback } from "react";
-import { DashboardLayout } from "@/components/layout";
-import { Table, Modal, ConfirmDialog, PageHeader, FormField, FormSelect, Button, IconActionButton, ModalFooter } from "@/components/ui";
-import { useAuth } from "@/context/AuthContext";
-import { departmentsApi, companiesApi } from "@/services/api";
-import { subscribeToNotifications } from "@/services/socket";
-import { Plus, Pencil, Trash2 } from "lucide-react";
-import type { Department, Company, NotificationPayload } from "@/types";
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { DashboardLayout } from '@/components/layout';
+import { Table, Modal, ConfirmDialog, PageHeader, FormField, FormSelect, Button, IconActionButton, ModalFooter } from '@/components/ui';
+import { useAuthStore } from '@/stores/auth.store';
+import { useDepartments, useCompanies } from '@/hooks/queries';
+import { useCreateDepartment, useUpdateDepartment, useDeleteDepartment } from '@/hooks/mutations';
+import { getErrorMessage } from '@/lib/error-utils';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
+import type { Department } from '@/types';
 
 export default function DepartmentsPage() {
-  const { hasRole } = useAuth();
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const hasRole = useAuthStore((s) => s.hasRole);
+  const isSuperAdmin = hasRole('super_admin');
+  const canManage = hasRole(['super_admin', 'company_admin']);
+
+  const { data: departments = [], isLoading } = useDepartments();
+  const { data: companies = [] } = useCompanies(isSuperAdmin);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedDepartment, setSelectedDepartment] =
-    useState<Department | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    companyId: 0,
-  });
-  const [error, setError] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+  const [formData, setFormData] = useState({ name: '', companyId: 0 });
+  // const [error, setError] = useState<string | null>(null); // Uncomment for inline error display
 
-  const canManage = hasRole(["super_admin", "company_admin"]);
-  const isSuperAdmin = hasRole("super_admin");
+  const createDepartment = useCreateDepartment();
+  const updateDepartment = useUpdateDepartment();
+  const deleteDepartment = useDeleteDepartment();
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [deptRes, compRes] = await Promise.all([
-        departmentsApi.getAll(),
-        isSuperAdmin
-          ? companiesApi.getAll()
-          : Promise.resolve({ data: { data: [] } }),
-      ]);
-      setDepartments(deptRes.data.data);
-      setCompanies(compRes.data.data);
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isSuperAdmin]);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // Subscribe to real-time notifications for department changes
-  useEffect(() => {
-    const unsubscribe = subscribeToNotifications(
-      (notification: NotificationPayload) => {
-        const departmentEvents = [
-          "department:created",
-          "department:updated",
-          "department:deleted",
-        ];
-
-        if (departmentEvents.includes(notification.type)) {
-          console.log(
-            "Real-time update: Refreshing departments data",
-            notification.type
-          );
-          fetchData();
-        }
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [fetchData]);
+  const isSubmitting = createDepartment.isPending || updateDepartment.isPending || deleteDepartment.isPending;
 
   const openCreateModal = () => {
     setSelectedDepartment(null);
-    setFormData({ name: "", companyId: companies[0]?.id || 0 });
+    setFormData({ name: '', companyId: companies[0]?.id || 0 });
     setIsModalOpen(true);
   };
 
   const openEditModal = (dept: Department) => {
     setSelectedDepartment(dept);
-    setFormData({
-      name: dept.name,
-      companyId: dept.company?.id || 0,
-    });
+    setFormData({ name: dept.name, companyId: dept.company?.id || 0 });
     setIsModalOpen(true);
   };
 
   const openDeleteDialog = (dept: Department) => {
     setSelectedDepartment(dept);
-    setError(null);
+    // setError(null); // Uncomment for inline error display
     setIsDeleteDialogOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    try {
-      if (selectedDepartment) {
-        await departmentsApi.update(selectedDepartment.id, {
-          name: formData.name,
-        });
-      } else {
-        await departmentsApi.create(formData);
-      }
-      setIsModalOpen(false);
-      fetchData();
-    } catch (error) {
-      console.error("Failed to save department:", error);
-    } finally {
-      setIsSubmitting(false);
+    if (selectedDepartment) {
+      updateDepartment.mutate(
+        { id: selectedDepartment.id, data: { name: formData.name } },
+        {
+          onSuccess: () => {
+            toast.success('Department updated successfully');
+            setIsModalOpen(false);
+          },
+          onError: (err) => {
+            toast.error(getErrorMessage(err, 'Failed to update department'));
+          },
+        }
+      );
+    } else {
+      createDepartment.mutate(formData, {
+        onSuccess: () => {
+          toast.success('Department created successfully');
+          setIsModalOpen(false);
+        },
+        onError: (err) => {
+          toast.error(getErrorMessage(err, 'Failed to create department'));
+        },
+      });
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!selectedDepartment) return;
-    setIsSubmitting(true);
-    setError(null);
+    // setError(null); // Uncomment for inline error display
 
-    try {
-      await departmentsApi.delete(selectedDepartment.id);
-      setIsDeleteDialogOpen(false);
-      fetchData();
-    } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { message?: string } } };
-      const message =
-        axiosError.response?.data?.message || "Failed to delete department";
-      setError(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    deleteDepartment.mutate(selectedDepartment.id, {
+      onSuccess: () => {
+        toast.success('Department deleted successfully');
+        setIsDeleteDialogOpen(false);
+      },
+      onError: (err) => {
+        toast.error(getErrorMessage(err, 'Failed to delete department'));
+        // setError(getErrorMessage(err, 'Failed to delete department')); // Uncomment for inline error display
+      },
+    });
   };
 
   const columns = [
     {
-      key: "rowNumber",
-      header: "#",
+      key: 'rowNumber',
+      header: '#',
       render: (_dept: Department, index: number) => index + 1,
     },
-    { key: "name", header: "Name", sortable: true },
+    { key: 'name', header: 'Name', sortable: true },
     {
-      key: "company",
-      header: "Company",
-      render: (dept: Department) => dept.company?.name || "-",
+      key: 'company',
+      header: 'Company',
+      render: (dept: Department) => dept.company?.name || '-',
     },
     ...(canManage
       ? [
           {
-            key: "actions",
-            header: "Actions",
+            key: 'actions',
+            header: 'Actions',
             render: (dept: Department) => (
               <div className="flex items-center gap-2">
                 <IconActionButton
@@ -199,16 +158,14 @@ export default function DepartmentsPage() {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={selectedDepartment ? "Edit Department" : "Create Department"}
+        title={selectedDepartment ? 'Edit Department' : 'Create Department'}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <FormField
             label="Department Name"
             type="text"
             value={formData.name}
-            onChange={(e) =>
-              setFormData({ ...formData, name: e.target.value })
-            }
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="Enter department name"
             required
           />
@@ -217,16 +174,8 @@ export default function DepartmentsPage() {
             <FormSelect
               label="Company"
               value={formData.companyId}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  companyId: Number(e.target.value),
-                })
-              }
-              options={companies.map((company) => ({
-                value: company.id,
-                label: company.name,
-              }))}
+              onChange={(e) => setFormData({ ...formData, companyId: Number(e.target.value) })}
+              options={companies.map((company) => ({ value: company.id, label: company.name }))}
               placeholder="Select a company"
               required
             />
@@ -234,7 +183,7 @@ export default function DepartmentsPage() {
 
           <ModalFooter
             onCancel={() => setIsModalOpen(false)}
-            submitLabel={selectedDepartment ? "Update" : "Create"}
+            submitLabel={selectedDepartment ? 'Update' : 'Create'}
             isLoading={isSubmitting}
           />
         </form>
@@ -250,7 +199,7 @@ export default function DepartmentsPage() {
         confirmText="Delete"
         isDestructive
         isLoading={isSubmitting}
-        error={error}
+        // error={error} // Uncomment for inline error display
       />
     </DashboardLayout>
   );
