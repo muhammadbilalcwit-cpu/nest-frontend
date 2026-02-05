@@ -1,18 +1,13 @@
 import { AxiosError } from 'axios';
 
-/**
- * API error response format (consistent with backend ApiResponse)
- */
+// API error response format (consistent with backend ApiResponse)
 interface ApiErrorResponse {
   message?: string | string[];
   status_code?: number;
   data?: unknown;
 }
 
-/**
- * Extracts a user-friendly error message from an axios error response.
- * Backend uses consistent format: { message, status_code, data }
- */
+// Extracts a user-friendly error message from an axios error response
 export function getErrorMessage(error: unknown, fallback = 'An error occurred'): string {
   // Handle AxiosError
   if (error && typeof error === 'object' && 'isAxiosError' in error) {

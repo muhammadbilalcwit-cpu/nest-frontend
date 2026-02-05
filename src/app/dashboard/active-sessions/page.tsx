@@ -23,7 +23,7 @@ import {
   subscribeToUserStatusChanged,
   subscribeToSessionAdded,
   subscribeToSessionRemoved,
-} from "@/services/socket";
+} from "@/services/socket-events/notification.events";
 import {
   Users,
   RefreshCw,

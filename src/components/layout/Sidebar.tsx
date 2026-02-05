@@ -113,7 +113,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
           </div>
           {!isCollapsed && (
             <span className="font-bold text-slate-900 dark:text-white truncate">
-              Nest Auth
+              CMS
             </span>
           )}
         </Link>

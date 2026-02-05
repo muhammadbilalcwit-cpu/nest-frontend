@@ -3,7 +3,7 @@ import { usersApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
 import type { User } from '@/types';
 
-/** Fetches all users. Pass true to include inactive users. */
+// Fetches all users. Pass true to include inactive users
 export function useUsers(includeInactive = false) {
   return useQuery({
     queryKey: queryKeys.users.all(includeInactive),
@@ -14,7 +14,7 @@ export function useUsers(includeInactive = false) {
   });
 }
 
-/** Fetches a single user by ID. */
+// Fetches a single user by ID
 export function useUser(id: number) {
   return useQuery({
     queryKey: queryKeys.users.detail(id),

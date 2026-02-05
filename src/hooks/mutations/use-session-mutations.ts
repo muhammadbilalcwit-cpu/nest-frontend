@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { activeSessionsApi } from '@/services/api';
 import type { RevokeCompanySessionInput } from '@/types';
 
-/** Revokes all sessions for a user (force logout). */
+// Revokes all sessions for a user (force logout)
 export function useRevokeAllUserSessions() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -13,7 +13,7 @@ export function useRevokeAllUserSessions() {
   });
 }
 
-/** Revokes a specific session by ID. */
+// Revokes a specific session by ID
 export function useRevokeSpecificSession() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -24,7 +24,7 @@ export function useRevokeSpecificSession() {
   });
 }
 
-/** Revokes all sessions in the admin's company. */
+// Revokes all sessions in the admin's company
 export function useRevokeAllSessions() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -35,9 +35,9 @@ export function useRevokeAllSessions() {
   });
 }
 
-// ─── Super Admin ──────────────────────────────────────────────────────────────
+// Super Admin mutations
 
-/** Revokes all sessions for a specific company (super admin only). */
+// Revokes all sessions for a specific company (super admin only)
 export function useRevokeAllSessionsForCompany() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -48,7 +48,7 @@ export function useRevokeAllSessionsForCompany() {
   });
 }
 
-/** Revokes a specific session in a company (super admin only). */
+// Revokes a specific session in a company (super admin only)
 export function useRevokeSpecificSessionForCompany() {
   const queryClient = useQueryClient();
   return useMutation({

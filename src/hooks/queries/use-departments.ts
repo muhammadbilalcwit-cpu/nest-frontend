@@ -3,7 +3,7 @@ import { departmentsApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
 import type { Department } from '@/types';
 
-/** Fetches all departments. */
+// Fetches all departments
 export function useDepartments() {
   return useQuery({
     queryKey: queryKeys.departments.all,
@@ -14,7 +14,7 @@ export function useDepartments() {
   });
 }
 
-/** Fetches a single department by ID. */
+// Fetches a single department by ID
 export function useDepartment(id: number) {
   return useQuery({
     queryKey: queryKeys.departments.detail(id),
@@ -26,7 +26,7 @@ export function useDepartment(id: number) {
   });
 }
 
-/** Fetches departments for a specific company. */
+// Fetches departments for a specific company
 export function useDepartmentsByCompany(companyId: number) {
   return useQuery({
     queryKey: queryKeys.departments.byCompany(companyId),

@@ -3,7 +3,7 @@ import { companiesApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
 import type { Company, UpdateInput } from '@/types';
 
-/** Creates a new company. Invalidates companies cache on success. */
+// Creates a new company
 export function useCreateCompany() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -14,7 +14,7 @@ export function useCreateCompany() {
   });
 }
 
-/** Updates an existing company. Invalidates companies cache on success. */
+// Updates an existing company
 export function useUpdateCompany() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -25,7 +25,7 @@ export function useUpdateCompany() {
   });
 }
 
-/** Deletes a company. Invalidates companies cache on success. */
+// Deletes a company
 export function useDeleteCompany() {
   const queryClient = useQueryClient();
   return useMutation({

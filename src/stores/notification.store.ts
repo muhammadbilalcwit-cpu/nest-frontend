@@ -3,7 +3,7 @@ import type { NotificationPayload } from '@/types';
 import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
-} from '@/services/socket';
+} from '@/services/socket-events/notification.events';
 
 interface NotificationStore {
   notifications: NotificationPayload[];

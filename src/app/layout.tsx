@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   },
   description: 'Manage your organization with ease',
   keywords: ['enterprise', 'management', 'companies', 'departments', 'users'],
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({

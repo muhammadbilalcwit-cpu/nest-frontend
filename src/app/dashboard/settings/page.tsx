@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import Image from 'next/image';
 import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout';
-import { PageHeader, FormField, Button } from '@/components/ui';
+import { PageHeader, FormField, Button, Avatar } from '@/components/ui';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import {
@@ -15,9 +14,6 @@ import {
 import { getErrorMessage } from '@/lib/error-utils';
 import { User as UserIcon, Lock, Palette, Camera, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
 type SettingsTab = 'profile' | 'password' | 'notifications' | 'appearance';
 
@@ -94,14 +90,6 @@ export default function SettingsPage() {
         toast.error(getErrorMessage(err, 'Failed to remove profile picture'));
       },
     });
-  };
-
-  // Get avatar URL
-  const getAvatarUrl = () => {
-    if (user?.profilePicture) {
-      return `${BACKEND_URL}${user.profilePicture}`;
-    }
-    return null;
   };
 
   const handlePasswordSubmit = (e: React.FormEvent) => {
@@ -188,20 +176,11 @@ export default function SettingsPage() {
                 {/* Avatar Section */}
                 <div className="flex items-center gap-6 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                   <div className="relative">
-                    <div className="w-24 h-24 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                      {getAvatarUrl() ? (
-                        <Image
-                          src={getAvatarUrl()!}
-                          alt="Profile"
-                          width={96}
-                          height={96}
-                          className="w-full h-full object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <UserIcon className="w-12 h-12 text-slate-400 dark:text-slate-500" />
-                      )}
-                    </div>
+                    <Avatar
+                      src={user?.profilePicture}
+                      name={user?.firstname || user?.email || 'User'}
+                      size="xl"
+                    />
                     {(uploadAvatar.isPending || removeAvatar.isPending) && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
                         <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />

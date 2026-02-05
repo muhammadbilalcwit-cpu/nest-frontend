@@ -7,7 +7,7 @@ import type {
   CompanyUsersWithSessionsResponse,
 } from '@/types';
 
-/** Fetches list of online users (legacy). */
+// Fetches list of online users (legacy)
 export function useOnlineUsers() {
   return useQuery({
     queryKey: queryKeys.activeSessions.onlineUsers,
@@ -18,7 +18,7 @@ export function useOnlineUsers() {
   });
 }
 
-/** Fetches online users with their session details (company admin). */
+// Fetches online users with their session details (company admin)
 export function useOnlineUsersWithSessions(enabled = true) {
   return useQuery({
     queryKey: queryKeys.activeSessions.onlineUsersWithSessions,
@@ -30,7 +30,7 @@ export function useOnlineUsersWithSessions(enabled = true) {
   });
 }
 
-/** Fetches status of all companies (super admin only). */
+// Fetches status of all companies (super admin only)
 export function useCompaniesStatus(enabled = true) {
   return useQuery({
     queryKey: queryKeys.activeSessions.companiesStatus,
@@ -42,7 +42,7 @@ export function useCompaniesStatus(enabled = true) {
   });
 }
 
-/** Fetches users with sessions for a specific company (super admin only). */
+// Fetches users with sessions for a specific company (super admin only)
 export function useCompanyUsersWithSessions(companyId: number) {
   return useQuery({
     queryKey: queryKeys.activeSessions.companyUsers(companyId),

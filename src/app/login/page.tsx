@@ -103,7 +103,7 @@ export default function LoginPage() {
             <div className="p-2 bg-primary-600 rounded-xl">
               <Building2 className="w-8 h-8 text-white" />
             </div>
-            <span className="text-2xl font-bold text-slate-900 dark:text-white">Enterprise MS</span>
+            <span className="text-2xl font-bold text-slate-900 dark:text-white">CMS</span>
           </div>
 
           <div className="card p-8">

@@ -3,7 +3,7 @@ import { companiesApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
 import type { Company } from '@/types';
 
-/** Fetches all companies. */
+// Fetches all companies
 export function useCompanies(enabled = true) {
   return useQuery({
     queryKey: queryKeys.companies.all,
@@ -15,7 +15,7 @@ export function useCompanies(enabled = true) {
   });
 }
 
-/** Fetches a single company by ID. */
+// Fetches a single company by ID
 export function useCompany(id: number) {
   return useQuery({
     queryKey: queryKeys.companies.detail(id),

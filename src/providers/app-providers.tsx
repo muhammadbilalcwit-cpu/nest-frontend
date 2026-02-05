@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+// import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Toaster } from 'sonner';
 import { queryClient } from '@/lib/query-client';
 import { useThemeStore } from '@/stores/theme.store';
@@ -69,7 +69,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
           },
         }}
       />
-      <ReactQueryDevtools initialIsOpen={false} />
+      {/* <ReactQueryDevtools initialIsOpen={false} /> */}
     </QueryClientProvider>
   );
 }

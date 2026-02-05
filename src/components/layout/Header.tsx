@@ -1,22 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import Image from 'next/image';
 import { useAuthStore } from '@/stores/auth.store';
 import { useThemeStore } from '@/stores/theme.store';
 import { useNotificationStore } from '@/stores/notification.store';
+import { Avatar } from '@/components/ui';
 import {
   Bell,
   Sun,
   Moon,
-  User,
   Check,
   CheckCheck,
 } from 'lucide-react';
 import clsx from 'clsx';
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
 interface HeaderProps {
   title: string;
@@ -205,20 +201,11 @@ export function Header({ title }: HeaderProps) {
             </div>
             <div className="text-xs text-slate-500 dark:text-dark-muted">{user?.email}</div>
           </div>
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-            {user?.profilePicture ? (
-              <Image
-                src={`${BACKEND_URL}${user.profilePicture}`}
-                alt="Profile"
-                width={40}
-                height={40}
-                className="w-full h-full object-cover"
-                unoptimized
-              />
-            ) : (
-              <User className="w-5 h-5 text-primary-600 dark:text-primary-400" />
-            )}
-          </div>
+          <Avatar
+            src={user?.profilePicture}
+            name={user?.firstname || user?.email || 'User'}
+            size="md"
+          />
         </div>
       </div>
     </header>

@@ -1,3 +1,4 @@
+export { Avatar } from './Avatar';
 export { Modal } from './Modal';
 export { Table } from './Table';
 export { StatsCard } from './StatsCard';

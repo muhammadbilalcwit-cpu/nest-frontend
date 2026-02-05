@@ -4,9 +4,9 @@ import { useNotificationStore } from '@/stores/notification.store';
 import {
   subscribeToUnreadNotifications,
   subscribeToUnreadCount,
-} from '@/services/socket';
+} from '@/services/socket-events/notification.events';
 
-/** Syncs notification store with WebSocket events for unread notifications. */
+// Syncs notification store with WebSocket events for unread notifications
 export function useNotificationSync() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const setNotifications = useNotificationStore((s) => s.setNotifications);

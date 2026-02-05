@@ -15,6 +15,15 @@ import type {
   AllCompaniesStatusResponse,
   OnlineUsersWithSessionsResponse,
   CompanyUsersWithSessionsResponse,
+  ChatUser,
+  ChatConversation,
+  ChatMessage,
+  GroupConversation,
+  GroupMessage,
+  CreateGroupPayload,
+  UpdateGroupPayload,
+  AddGroupMembersPayload,
+  GroupMessageInfo,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -356,6 +365,152 @@ export const activeSessionsApi = {
     api.post<ApiResponse<RevokeSpecificSessionResponse>>(
       `/notifications/admin/company/${companyId}/revoke-session/${sessionId}`,
     ),
+};
+
+// Chat endpoints (for managers and users only)
+export const chatApi = {
+  // Get all users the current user can chat with
+  getChatableUsers: () =>
+    api.get<ApiResponse<ChatUser[]>>("/chat/users"),
+
+  // Get all conversations for the current user
+  getConversations: () =>
+    api.get<ApiResponse<ChatConversation[]>>("/chat/conversations"),
+
+  // Get or create a conversation with a user
+  getOrCreateConversation: (userId: number) =>
+    api.post<ApiResponse<ChatConversation>>(`/chat/conversations/${userId}`),
+
+  // Get messages for a conversation
+  getMessages: (conversationId: string, page = 1, limit = 50) =>
+    api.get<ApiResponse<{ messages: ChatMessage[]; total: number }>>(
+      `/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`
+    ),
+
+  // Get unread message count (total, direct, and groups)
+  getUnreadCount: () =>
+    api.get<ApiResponse<{ count: number; direct: number; groups: number }>>("/chat/unread-count"),
+
+  // Delete a conversation (soft delete)
+  deleteConversation: (conversationId: string) =>
+    api.delete<ApiResponse<{ deleted: boolean }>>(
+      `/chat/conversations/${conversationId}`
+    ),
+
+  // Delete a message
+  deleteMessage: (messageId: string, forEveryone = false) =>
+    api.delete<ApiResponse<{ deleted: boolean; forEveryone: boolean }>>(
+      `/chat/messages/${messageId}?forEveryone=${forEveryone}`
+    ),
+
+  // ==================== GROUP ENDPOINTS ====================
+
+  // Create a new group
+  createGroup: (data: CreateGroupPayload) =>
+    api.post<ApiResponse<GroupConversation>>("/chat/groups", data),
+
+  // Get all groups for current user
+  getGroups: () => api.get<ApiResponse<GroupConversation[]>>("/chat/groups"),
+
+  // Get group details
+  getGroup: (groupId: string) =>
+    api.get<ApiResponse<GroupConversation>>(`/chat/groups/${groupId}`),
+
+  // Update group info (name, avatar)
+  updateGroup: (groupId: string, data: UpdateGroupPayload) =>
+    api.patch<ApiResponse<GroupConversation>>(`/chat/groups/${groupId}`, data),
+
+  // Upload group avatar (admin only)
+  uploadGroupAvatar: (groupId: string, formData: FormData) =>
+    api.post<ApiResponse<{ avatarUrl: string }>>(`/chat/groups/${groupId}/avatar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  // Add members to group
+  addGroupMembers: (groupId: string, data: AddGroupMembersPayload) =>
+    api.post<ApiResponse<GroupConversation>>(
+      `/chat/groups/${groupId}/members`,
+      data
+    ),
+
+  // Remove member from group
+  removeGroupMember: (groupId: string, memberId: number) =>
+    api.delete<ApiResponse<GroupConversation>>(
+      `/chat/groups/${groupId}/members/${memberId}`
+    ),
+
+  // Leave a group (any member can leave, admin can specify new admin)
+  leaveGroup: (groupId: string, newAdminId?: number) =>
+    api.post<ApiResponse<{ left: boolean; newAdminId?: number }>>(
+      `/chat/groups/${groupId}/leave`,
+      newAdminId ? { newAdminId } : {}
+    ),
+
+  // Delete a group (admin only)
+  deleteGroup: (groupId: string) =>
+    api.delete<ApiResponse<{ deleted: boolean }>>(`/chat/groups/${groupId}`),
+
+  // Get group messages
+  getGroupMessages: (groupId: string, page = 1, limit = 50) =>
+    api.get<ApiResponse<{ messages: GroupMessage[]; total: number }>>(
+      `/chat/groups/${groupId}/messages?page=${page}&limit=${limit}`
+    ),
+
+  // Mark group messages as read
+  markGroupAsRead: (groupId: string) =>
+    api.post<ApiResponse<{ markedCount: number }>>(
+      `/chat/groups/${groupId}/read`
+    ),
+
+  // Get message info (delivery/read status for group messages)
+  getMessageInfo: (messageId: string) =>
+    api.get<ApiResponse<GroupMessageInfo>>(`/chat/messages/${messageId}/info`),
+
+  // ==================== ATTACHMENT ENDPOINTS ====================
+
+  // Upload a chat attachment (image, video, document)
+  uploadAttachment: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post<
+      ApiResponse<{
+        type: "image" | "video" | "document" | "voice";
+        url: string;
+        filename: string;
+        originalFilename: string;
+        size: number;
+        mimeType: string;
+      }>
+    >("/chat/attachments", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  // Upload a voice note
+  uploadVoiceNote: (file: Blob, duration?: number, waveform?: number[]) => {
+    const formData = new FormData();
+    formData.append("file", file, "voice-note.webm");
+    if (duration !== undefined) {
+      formData.append("duration", duration.toString());
+    }
+    if (waveform) {
+      formData.append("waveform", JSON.stringify(waveform));
+    }
+    return api.post<
+      ApiResponse<{
+        type: "voice";
+        url: string;
+        filename: string;
+        originalFilename: string;
+        size: number;
+        mimeType: string;
+        duration?: number;
+        waveform?: number[];
+      }>
+    >("/chat/attachments/voice", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export default api;

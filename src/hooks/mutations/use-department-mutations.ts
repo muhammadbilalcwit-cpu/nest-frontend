@@ -3,7 +3,7 @@ import { departmentsApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
 import type { Department, CreateDepartmentInput, UpdateInput } from '@/types';
 
-/** Creates a new department. Invalidates departments cache on success. */
+// Creates a new department
 export function useCreateDepartment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -14,7 +14,7 @@ export function useCreateDepartment() {
   });
 }
 
-/** Updates an existing department. Invalidates departments cache on success. */
+// Updates an existing department
 export function useUpdateDepartment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -25,7 +25,7 @@ export function useUpdateDepartment() {
   });
 }
 
-/** Deletes a department. Invalidates departments cache on success. */
+// Deletes a department
 export function useDeleteDepartment() {
   const queryClient = useQueryClient();
   return useMutation({

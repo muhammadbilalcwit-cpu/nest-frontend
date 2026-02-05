@@ -4,9 +4,9 @@ import { FORCE_LOGOUT_EVENT } from '@/services/api';
 import {
   subscribeToForceDisconnect,
   subscribeToSessionExpired,
-} from '@/services/socket';
+} from '@/services/socket-events/notification.events';
 
-/** Listens for auth events (401, session revoked/expired) and handles logout. */
+// Listens for auth events (401, session revoked/expired) and handles logout
 export function useAuthEvents() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);

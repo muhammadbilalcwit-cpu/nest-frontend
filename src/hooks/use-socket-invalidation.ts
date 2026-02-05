@@ -1,18 +1,17 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { subscribeToNotifications } from '@/services/socket';
+import { subscribeToNotifications } from '@/services/socket-events/notification.events';
 import { useAuthStore } from '@/stores/auth.store';
 import { useNotificationStore } from '@/stores/notification.store';
 import { queryKeys } from '@/lib/query-client';
 
-/** Bridges WebSocket events with TanStack Query cache invalidation. */
+// Bridges WebSocket events with TanStack Query cache invalidation
 export function useSocketInvalidation() {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const addNotification = useNotificationStore((s) => s.addNotification);
 
   useEffect(() => {
-    // Only subscribe to notifications when authenticated
     if (!isAuthenticated) return;
 
     const unsubscribe = subscribeToNotifications((notification) => {

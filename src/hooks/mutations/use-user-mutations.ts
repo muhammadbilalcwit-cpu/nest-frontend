@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
-import type { CreateUserInput, UpdateUserInput, UpdateProfileInput, UpdateInput, User } from '@/types';
+import type { CreateUserInput, UpdateUserInput, UpdateProfileInput, UpdateInput } from '@/types';
 
-/** Creates a new user. Invalidates users cache on success. */
+// Creates a new user
 export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -14,7 +14,7 @@ export function useCreateUser() {
   });
 }
 
-/** Updates an existing user. Invalidates users cache on success. */
+// Updates an existing user
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -25,7 +25,7 @@ export function useUpdateUser() {
   });
 }
 
-/** Soft deletes a user. Invalidates users cache on success. */
+// Soft deletes a user
 export function useDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -36,7 +36,7 @@ export function useDeleteUser() {
   });
 }
 
-/** Assigns roles to a user. Invalidates users cache on success. */
+// Assigns roles to a user
 export function useAssignRoles() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -48,7 +48,7 @@ export function useAssignRoles() {
   });
 }
 
-/** Removes a role from a user. Invalidates users cache on success. */
+// Removes a role from a user
 export function useRemoveRole() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -59,7 +59,7 @@ export function useRemoveRole() {
   });
 }
 
-/** Updates user active/inactive status. Invalidates users cache on success. */
+// Updates user active/inactive status
 export function useUpdateUserStatus() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -71,7 +71,7 @@ export function useUpdateUserStatus() {
   });
 }
 
-/** Updates current user's own profile. Invalidates profile cache on success. */
+// Updates current user's own profile
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -82,7 +82,7 @@ export function useUpdateProfile() {
   });
 }
 
-/** Uploads avatar for current user. Invalidates profile cache on success. */
+// Uploads avatar for current user
 export function useUploadAvatar() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -93,7 +93,7 @@ export function useUploadAvatar() {
   });
 }
 
-/** Removes avatar for current user. Invalidates profile cache on success. */
+// Removes avatar for current user
 export function useRemoveAvatar() {
   const queryClient = useQueryClient();
   return useMutation({

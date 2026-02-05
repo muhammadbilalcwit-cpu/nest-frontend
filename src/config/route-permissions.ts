@@ -1,9 +1,6 @@
 import type { RoleSlug } from '@/types';
 
-/**
- * Defines which roles can access each dashboard route.
- * Routes not listed here are accessible to all authenticated users.
- */
+// Defines which roles can access each dashboard route
 export const ROUTE_PERMISSIONS: Record<string, RoleSlug[]> = {
   '/dashboard/companies': ['super_admin'],
   '/dashboard/departments': ['super_admin', 'company_admin'],
@@ -13,10 +10,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoleSlug[]> = {
   '/dashboard/active-sessions': ['super_admin', 'company_admin'],
 };
 
-/**
- * Check if a given pathname is allowed for the user's roles.
- * Returns true if no restriction is defined (open to all authenticated users).
- */
+// Check if a given pathname is allowed for the user's roles
 export function isRouteAllowed(
   pathname: string,
   hasRole: (role: RoleSlug | RoleSlug[]) => boolean,

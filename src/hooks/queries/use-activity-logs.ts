@@ -3,7 +3,7 @@ import { activityLogsApi } from '@/services/api';
 import { queryKeys } from '@/lib/query-client';
 import type { ActivityLogsParams, ActivityLog } from '@/types';
 
-/** Fetches paginated activity logs with optional filters. */
+// Fetches paginated activity logs with optional filters
 export function useActivityLogs(params: ActivityLogsParams = {}) {
   const cleanParams: ActivityLogsParams = {
     page: params.page || 1,
@@ -21,7 +21,7 @@ export function useActivityLogs(params: ActivityLogsParams = {}) {
   });
 }
 
-/** Fetches activity logs for a specific user. */
+// Fetches activity logs for a specific user
 export function useActivityLogsByUser(userId: number) {
   return useQuery({
     queryKey: queryKeys.activityLogs.byUser(userId),
