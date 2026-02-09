@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { FileText, Download, Play, X } from 'lucide-react';
+import Image from 'next/image';
 import clsx from 'clsx';
 import type { MessageAttachment as MessageAttachmentType } from '@/types';
 import { VoiceNotePlayer } from './VoiceNotePlayer';
@@ -77,12 +78,14 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
           className="relative cursor-pointer rounded-lg overflow-hidden"
           onClick={handleOpenLightbox}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={fullUrl}
             alt={attachment.originalFilename}
+            width={220}
+            height={180}
             className="object-cover rounded-lg"
             style={{ maxWidth: '220px', maxHeight: '180px', width: 'auto', height: 'auto' }}
+            unoptimized
           />
         </div>
 
@@ -113,12 +116,14 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
             >
               <Download className="w-6 h-6" />
             </button>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={fullUrl}
               alt={attachment.originalFilename}
+              width={1200}
+              height={900}
               className="max-w-[90vw] max-h-[90vh] object-contain"
               onClick={(e) => e.stopPropagation()}
+              unoptimized
             />
           </div>,
           document.body
@@ -137,16 +142,18 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
             onClick={() => setIsVideoPlaying(true)}
           >
             {attachment.thumbnailUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <Image
                 src={
                   attachment.thumbnailUrl.startsWith('http')
                     ? attachment.thumbnailUrl
                     : `${API_URL}${attachment.thumbnailUrl}`
                 }
                 alt={attachment.originalFilename}
+                width={250}
+                height={180}
                 className="object-cover rounded-lg w-full"
                 style={{ maxWidth: '250px', maxHeight: '180px' }}
+                unoptimized
               />
             ) : (
               <div className="w-[250px] h-[140px] bg-slate-800 rounded-lg flex items-center justify-center">

@@ -21,7 +21,7 @@ export function VoiceRecorder({
   disabled,
 }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  const [, setIsPaused] = useState(false);
   const [duration, setDuration] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -35,7 +35,6 @@ export function VoiceRecorder({
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const isRecordingRef = useRef(false); // Use ref to avoid stale closure issues
-  const isMountedRef = useRef(true); // Track if component is truly mounted
   const recordingStartTimeRef = useRef<number>(0); // Track when recording started
   const isCanceledRef = useRef(false); // Track if recording was canceled
 

@@ -90,7 +90,7 @@ export function ChatWindow() {
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [activeConversation?._id]);
+  }, [activeConversation]);
 
   // Scroll to bottom when new messages are added
   useEffect(() => {

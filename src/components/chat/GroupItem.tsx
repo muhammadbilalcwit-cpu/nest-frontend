@@ -32,15 +32,15 @@ export function GroupItem({
   const isAdmin = group.groupAdmin === currentUserId;
   const memberCount = group.participants?.length || 0;
 
-  // Get user name by ID
-  const getUserName = (userId: number): string => {
-    const user = chatableUsers.find((u) => u.id === userId);
-    if (!user) return 'Unknown';
-    return `${user.firstname || ''} ${user.lastname || ''}`.trim() || 'Unknown';
-  };
-
   // Generate display text for system message preview (shows "you" for current user)
   const getLastMessageText = useMemo((): string => {
+    // Get user name by ID (inside useMemo to satisfy exhaustive-deps)
+    const getUserName = (userId: number): string => {
+      const user = chatableUsers.find((u) => u.id === userId);
+      if (!user) return 'Unknown';
+      return `${user.firstname || ''} ${user.lastname || ''}`.trim() || 'Unknown';
+    };
+
     const { lastMessageSystemType, lastMessageTargetUserId, lastMessageActorUserId, lastMessage } = group;
 
     // If not a system message, return original

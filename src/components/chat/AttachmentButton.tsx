@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Paperclip, Image, FileText, Video, X, Loader2 } from 'lucide-react';
+import { Paperclip, Image as ImageIcon, FileText, Video, X, Loader2 } from 'lucide-react';
+import Image from 'next/image';
 import clsx from 'clsx';
 import { toast } from 'sonner';
 import { chatApi } from '@/services/api';
@@ -189,7 +190,7 @@ export function AttachmentButton({
               )}
             >
               <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <Image className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <ImageIcon className="w-4 h-4 text-purple-600 dark:text-purple-400" />
               </div>
               <span>Photo</span>
             </button>
@@ -255,10 +256,13 @@ export function AttachmentPreview({
     <div className="relative inline-flex items-center gap-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg max-w-[250px]">
       {/* Preview based on type */}
       {attachment.type === 'image' && (
-        <img
+        <Image
           src={fullUrl}
           alt={attachment.originalFilename}
+          width={48}
+          height={48}
           className="w-12 h-12 object-cover rounded"
+          unoptimized
         />
       )}
 

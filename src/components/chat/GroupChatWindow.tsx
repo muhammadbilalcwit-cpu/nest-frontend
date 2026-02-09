@@ -121,7 +121,7 @@ export function GroupChatWindow() {
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [activeGroup?._id]);
+  }, [activeGroup]);
 
   // Scroll to bottom when new messages are added
   useEffect(() => {
