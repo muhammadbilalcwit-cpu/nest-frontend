@@ -58,21 +58,24 @@ export function GroupInfoModal({ group, onClose }: GroupInfoModalProps) {
       };
     }
     const member = chatableUsers.find((u) => u.id === memberId);
-    return member
-      ? {
-          id: member.id,
-          firstname: member.firstname || '',
-          lastname: member.lastname || '',
-          profilePicture: member.profilePicture,
-          isOnline: onlineUsers.has(member.id),
-        }
-      : {
-          id: memberId,
-          firstname: 'Unknown',
-          lastname: '',
-          profilePicture: null,
-          isOnline: false,
-        };
+    if (member) {
+      return {
+        id: member.id,
+        firstname: member.firstname || '',
+        lastname: member.lastname || '',
+        profilePicture: member.profilePicture,
+        isOnline: onlineUsers.has(member.id),
+      };
+    }
+    // Fallback to group members (handles cross-role visibility)
+    const groupMember = group.members?.find((m) => m.id === memberId);
+    return {
+      id: memberId,
+      firstname: groupMember?.firstname || 'Unknown',
+      lastname: groupMember?.lastname || '',
+      profilePicture: groupMember?.profilePicture || null,
+      isOnline: onlineUsers.has(memberId),
+    };
   };
 
   const getMemberName = (member: ReturnType<typeof getMemberInfo>) => {
@@ -104,7 +107,7 @@ export function GroupInfoModal({ group, onClose }: GroupInfoModalProps) {
     setIsUploadingAvatar(true);
     try {
       const formData = new FormData();
-      formData.append('avatar', file);
+      formData.append('file', file);
 
       const response = await chatApi.uploadGroupAvatar(group._id, formData);
       const avatarUrl = response.data.data.avatarUrl;

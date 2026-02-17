@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, Button, Badge } from '@/components/ui';
 import { useChatStore } from '@/stores/chat.store';
+import { useGroupChatStore } from '@/stores/group-chat.store';
 import type { GroupConversation, SystemMessageType } from '@/types';
 
 interface GroupItemProps {
@@ -26,6 +27,17 @@ export function GroupItem({
 }: GroupItemProps) {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const chatableUsers = useChatStore((s) => s.chatableUsers);
+  const groupTypingUsers = useGroupChatStore((s) => s.typingUsers);
+  const typingInGroup = groupTypingUsers.get(group._id);
+  const isTyping = typingInGroup && typingInGroup.size > 0;
+
+  const getTypingUserName = (userId: number): string => {
+    const user = chatableUsers.find((u) => u.id === userId);
+    if (user) return `${user.firstname || ''}`.trim() || 'Someone';
+    const member = group.members?.find((m) => m.id === userId);
+    if (member) return `${member.firstname || ''}`.trim() || 'Someone';
+    return 'Someone';
+  };
 
   const isUnread = (group.unreadCount || 0) > 0;
   const isSentByMe = group.lastMessageSenderId === currentUserId;
@@ -34,14 +46,18 @@ export function GroupItem({
 
   // Generate display text for system message preview (shows "you" for current user)
   const getLastMessageText = useMemo((): string => {
-    // Get user name by ID (inside useMemo to satisfy exhaustive-deps)
-    const getUserName = (userId: number): string => {
+    // Get user name by ID — check chatableUsers first, then group members, then embedded names from API
+    const getUserName = (userId: number, embeddedName?: string | null): string => {
       const user = chatableUsers.find((u) => u.id === userId);
-      if (!user) return 'Unknown';
-      return `${user.firstname || ''} ${user.lastname || ''}`.trim() || 'Unknown';
+      if (user) return `${user.firstname || ''} ${user.lastname || ''}`.trim() || 'Unknown';
+      const member = group.members?.find((m) => m.id === userId);
+      if (member) return `${member.firstname || ''} ${member.lastname || ''}`.trim() || 'Unknown';
+      // Fallback to embedded name from API (handles former members, cross-company users)
+      return embeddedName || 'Unknown';
     };
 
-    const { lastMessageSystemType, lastMessageTargetUserId, lastMessageActorUserId, lastMessage } = group;
+    const { lastMessageSystemType, lastMessageTargetUserId, lastMessageActorUserId, lastMessage,
+            lastMessageActorName, lastMessageTargetName } = group;
 
     // If not a system message, return original
     if (!lastMessageSystemType || !lastMessageTargetUserId) {
@@ -51,9 +67,9 @@ export function GroupItem({
     const isTargetCurrentUser = lastMessageTargetUserId === currentUserId;
     const isActorCurrentUser = lastMessageActorUserId === currentUserId;
 
-    const targetName = isTargetCurrentUser ? 'you' : getUserName(lastMessageTargetUserId);
+    const targetName = isTargetCurrentUser ? 'you' : getUserName(lastMessageTargetUserId, lastMessageTargetName);
     const actorName = lastMessageActorUserId
-      ? (isActorCurrentUser ? 'You' : getUserName(lastMessageActorUserId))
+      ? (isActorCurrentUser ? 'You' : getUserName(lastMessageActorUserId, lastMessageActorName))
       : '';
 
     switch (lastMessageSystemType as SystemMessageType) {
@@ -141,17 +157,25 @@ export function GroupItem({
             )}
           </div>
           <div className="flex items-center justify-between mt-0.5">
-            <p
-              className={clsx(
-                'text-sm truncate',
-                isUnread
-                  ? 'text-slate-700 dark:text-dark-text font-medium'
-                  : 'text-slate-500 dark:text-dark-muted'
-              )}
-            >
-              {isSentByMe && !group.lastMessageSystemType && 'You: '}
-              {getLastMessageText}
-            </p>
+            {isTyping ? (
+              <p className="text-sm truncate text-green-500 dark:text-green-400 italic">
+                {typingInGroup!.size === 1
+                  ? `${getTypingUserName(Array.from(typingInGroup!)[0])} is typing...`
+                  : `${typingInGroup!.size} people are typing...`}
+              </p>
+            ) : (
+              <p
+                className={clsx(
+                  'text-sm truncate',
+                  isUnread
+                    ? 'text-slate-700 dark:text-dark-text font-medium'
+                    : 'text-slate-500 dark:text-dark-muted'
+                )}
+              >
+                {isSentByMe && !group.lastMessageSystemType && 'You: '}
+                {getLastMessageText}
+              </p>
+            )}
             {isUnread && (
               <Badge
                 label={String(group.unreadCount)}

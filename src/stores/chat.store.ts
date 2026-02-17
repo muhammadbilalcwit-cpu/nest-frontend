@@ -10,8 +10,9 @@ import type {
   MessageMention,
 } from '@/types';
 import { chatApi } from '@/services/api';
-import { isConnected } from '@/services/socket-manager';
+import { isChatConnected as isConnected } from '@/services/chat-socket';
 import { useAuthStore } from './auth.store';
+
 import {
   sendChatMessage,
   sendTypingIndicator,
@@ -33,11 +34,31 @@ let unsubscribeFunctions: Array<() => void> = [];
 const processedMessageIds = new Set<string>();
 const MAX_PROCESSED_IDS = 100;
 
+interface ChatConfig {
+  deleteForEveryoneHours: number;
+  maxImageSize: number;
+  maxVideoSize: number;
+  maxDocumentSize: number;
+  maxVoiceSize: number;
+  chatAccessRoles: string[];
+}
+
+const DEFAULT_CHAT_CONFIG: ChatConfig = {
+  deleteForEveryoneHours: 48,
+  maxImageSize: 10_485_760,
+  maxVideoSize: 52_428_800,
+  maxDocumentSize: 26_214_400,
+  maxVoiceSize: 5_242_880,
+  chatAccessRoles: [],
+};
+
 interface ChatStore {
   // State
   isOpen: boolean;
+  windowMode: 'sidebar' | 'floating';
   isLoading: boolean;
   isDeleting: boolean;
+  chatConfig: ChatConfig;
   chatableUsers: ChatUser[];
   conversations: ChatConversation[];
   activeConversation: ChatConversation | null;
@@ -50,7 +71,9 @@ interface ChatStore {
   openChat: () => void;
   closeChat: () => void;
   toggleChat: () => void;
+  setWindowMode: (mode: 'sidebar' | 'floating') => void;
 
+  fetchChatConfig: () => Promise<void>;
   initializeChat: () => Promise<void>;
   cleanupChat: () => void;
 
@@ -67,7 +90,7 @@ interface ChatStore {
   setTyping: (isTyping: boolean) => void;
   deleteMessage: (messageId: string, forEveryone: boolean) => Promise<boolean>;
 
-  handleIncomingMessage: (data: ChatMessageReceived) => void;
+  handleIncomingMessage: (data: ChatMessageReceived) => Promise<void>;
   handleTyping: (senderId: number, isTyping: boolean) => void;
   handleUserOnline: (userId: number) => void;
   handleUserOffline: (userId: number) => void;
@@ -79,8 +102,10 @@ interface ChatStore {
 export const useChatStore = create<ChatStore>((set, get) => ({
   // Initial State
   isOpen: false,
+  windowMode: 'sidebar',
   isLoading: false,
   isDeleting: false,
+  chatConfig: DEFAULT_CHAT_CONFIG,
   chatableUsers: [],
   conversations: [],
   activeConversation: null,
@@ -90,9 +115,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   onlineUsers: new Set(),
 
   // UI Actions
-  openChat: () => set({ isOpen: true }),
+  openChat: () => set({ isOpen: true, windowMode: 'sidebar' }),
   closeChat: () => set({ isOpen: false }),
-  toggleChat: () => set((state) => ({ isOpen: !state.isOpen })),
+  toggleChat: () => set((state) => ({ isOpen: !state.isOpen, ...(!state.isOpen ? { windowMode: 'sidebar' } : {}) })),
+  setWindowMode: (mode) => set({ windowMode: mode }),
+
+  // Fetch chat config independently (called on auth, before initializeChat)
+  fetchChatConfig: async () => {
+    try {
+      const res = await chatApi.getChatConfig();
+      if (res.data?.data) {
+        set({ chatConfig: res.data.data });
+      } else {
+        console.warn('[Chat] Config response missing data:', res.data);
+      }
+    } catch (err) {
+      console.error('[Chat] Failed to fetch config:', err);
+    }
+  },
 
   // Initialize chat (subscribe to events and fetch data)
   // Note: Socket connection is managed centrally by auth.store
@@ -161,7 +201,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
     );
 
-    // Fetch initial data
+    // Fetch initial data (config already fetched by fetchChatConfig)
     await Promise.all([
       get().fetchChatableUsers(),
       get().fetchConversations(),
@@ -179,8 +219,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // Clear processed message IDs
     processedMessageIds.clear();
 
+    // Reset data state but preserve UI state (isOpen, windowMode)
+    // so the chat window stays open across page navigations.
+    // On logout, canAccessChat becomes false and ChatSidebar returns null.
     set({
-      isOpen: false,
       isDeleting: false,
       chatableUsers: [],
       conversations: [],
@@ -197,16 +239,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const response = await chatApi.getChatableUsers();
       const users = response.data.data;
-      set({ chatableUsers: users });
 
-      // Update online users set
-      const onlineUsers = new Set<number>();
-      users.forEach((user) => {
-        if (user.isOnline) {
-          onlineUsers.add(user.id);
-        }
+      // Merge online users into the set (don't replace — runs in parallel with fetchConversations)
+      set((state) => {
+        const newOnlineUsers = new Set(state.onlineUsers);
+        users.forEach((user) => {
+          if (user.isOnline) {
+            newOnlineUsers.add(user.id);
+          }
+        });
+        return { chatableUsers: users, onlineUsers: newOnlineUsers };
       });
-      set({ onlineUsers });
     } catch (error) {
       console.error('Failed to fetch chatable users:', error);
     }
@@ -216,7 +259,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   fetchConversations: async () => {
     try {
       const response = await chatApi.getConversations();
-      set({ conversations: response.data.data });
+      const conversations = response.data.data;
+
+      // Merge conversation partners' online status into the set
+      // (catches users like super_admin who may not be in chatableUsers)
+      set((state) => {
+        const newOnlineUsers = new Set(state.onlineUsers);
+        conversations.forEach((conv) => {
+          if (conv.otherUser?.isOnline) {
+            newOnlineUsers.add(conv.otherUser.id);
+          }
+        });
+        return { conversations, onlineUsers: newOnlineUsers };
+      });
     } catch (error) {
       console.error('Failed to fetch conversations:', error);
     }
@@ -227,7 +282,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       set({ isLoading: true });
       const response = await chatApi.getMessages(conversationId);
-      set({ messages: response.data.data.messages });
+      const messages = response.data.data.messages;
+
+      set({ messages });
     } catch (error) {
       console.error('Failed to fetch messages:', error);
     } finally {
@@ -247,7 +304,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   // Select a conversation and load its messages
   selectConversation: async (conversation: ChatConversation) => {
-    set({ activeConversation: conversation, messages: [] });
+    set({ activeConversation: conversation, messages: [], isLoading: true });
     await get().fetchMessages(conversation._id);
 
     // Mark messages as read
@@ -390,7 +447,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
 
     // Send to backend with tempId for confirmation mapping
-    const result = await sendChatMessage({ tempId, recipientId, content, attachment, mentions });
+    const result = await sendChatMessage({
+      tempId,
+      recipientId,
+      content,
+      attachment,
+      mentions,
+    });
 
     if (!result.success) {
       // Remove optimistic message on failure
@@ -441,9 +504,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   // Handle incoming message
-  handleIncomingMessage: (data: ChatMessageReceived) => {
+  handleIncomingMessage: async (data: ChatMessageReceived) => {
     const { message, conversation } = data;
     const { activeConversation, chatableUsers } = get();
+    const currentUser = useAuthStore.getState().user;
+    const isOwnMessage = message.senderId === currentUser?.id;
 
     // Prevent duplicate messages using global tracking
     if (processedMessageIds.has(message._id)) {
@@ -481,8 +546,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       // Mark as read immediately
       markMessagesAsRead(conversation._id);
-    } else {
-      // Increment unread count
+    } else if (!isOwnMessage) {
+      // Only increment unread count for OTHER people's messages
+      // (own messages from another session should not trigger unread)
       set((state) => ({ unreadCount: state.unreadCount + 1 }));
     }
 
@@ -501,8 +567,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           lastMessageSenderId: message.senderId,
           lastMessageAt: message.createdAt,
           unreadCount:
-            activeConversation?._id === conversation._id
-              ? 0
+            activeConversation?._id === conversation._id || isOwnMessage
+              ? (activeConversation?._id === conversation._id ? 0 : updatedConversations[existingIndex].unreadCount || 0)
               : (updatedConversations[existingIndex].unreadCount || 0) + 1,
         };
 
@@ -512,7 +578,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       } else {
         // Conversation was deleted or is new - need to add it with proper data
         // Find the other user from chatableUsers to get their info
-        const otherUserId = message.senderId; // The sender is the other user
+        const otherUserId = isOwnMessage ? message.recipientId : message.senderId;
         const otherUser = chatableUsers.find((u) => u.id === otherUserId);
 
         const newConversation = {
@@ -520,7 +586,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           lastMessage: lastMessagePreview,
           lastMessageSenderId: message.senderId,
           lastMessageAt: message.createdAt,
-          unreadCount: 1,
+          unreadCount: isOwnMessage ? 0 : 1,
           otherUser: otherUser || conversation.otherUser,
         };
 
@@ -601,13 +667,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   // Handle message confirmation (tempId → realId mapping)
   // Called after RabbitMQ consumer saves message to MongoDB
   handleMessageConfirmed: (data: MessageConfirmedPayload) => {
+    // Check if this session has the optimistic message (only the sending session does)
+    const hasTempMessage = get().messages.some((m) => m._id === data.tempId);
+
     set((state) => ({
       messages: state.messages.map((m) =>
         m._id === data.tempId ? { ...m, _id: data.messageId } : m
       ),
     }));
 
-    // Also add to processed IDs to prevent duplicate if we receive the same message
-    processedMessageIds.add(data.messageId);
+    // Only mark as processed if this session had the optimistic message.
+    // Other sessions (multi-device) don't have the tempId and need to
+    // receive the full message via chat:receive instead.
+    if (hasTempMessage) {
+      processedMessageIds.add(data.messageId);
+    }
   },
 }));

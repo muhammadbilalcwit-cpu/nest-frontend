@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   Shield,
   Wifi,
+  Eye,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -28,6 +29,7 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   roles?: string[];
+  visible?: boolean;
 }
 
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
@@ -35,6 +37,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const hasRole = useAuthStore((s) => s.hasRole);
   const logout = useAuthStore((s) => s.logout);
   const primaryRole = useAuthStore((s) => s.primaryRole);
+  const hasCompliancePolicy = useAuthStore((s) => s.hasCompliancePolicy);
 
   const navItems: NavItem[] = [
     {
@@ -79,6 +82,12 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       roles: ['super_admin', 'company_admin'],
     },
     {
+      href: '/dashboard/compliance',
+      label: 'Compliance',
+      icon: <Eye className="w-5 h-5" />,
+      visible: hasCompliancePolicy,
+    },
+    {
       href: '/dashboard/settings',
       label: 'Settings',
       icon: <Settings className="w-5 h-5" />,
@@ -87,6 +96,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   ];
 
   const filteredNavItems = navItems.filter((item) => {
+    if (item.visible === false) return false;
     if (!item.roles) return true;
     return item.roles.some((role) => hasRole(role as 'super_admin' | 'company_admin' | 'manager' | 'user'));
   });

@@ -247,10 +247,10 @@ export function AttachmentPreview({
   attachment,
   onRemove,
 }: AttachmentPreviewProps) {
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  const CHAT_API_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8006';
   const fullUrl = attachment.url.startsWith('http')
     ? attachment.url
-    : `${API_URL}${attachment.url}`;
+    : `${CHAT_API_URL}${attachment.url}`;
 
   return (
     <div className="relative inline-flex items-center gap-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg max-w-[250px]">

@@ -19,8 +19,9 @@ import type {
   MessageMention,
 } from '@/types';
 import { chatApi } from '@/services/api';
-import { isConnected } from '@/services/socket-manager';
+import { isChatConnected as isConnected } from '@/services/chat-socket';
 import { useAuthStore } from './auth.store';
+
 import {
   sendGroupMessage,
   sendGroupTypingIndicator,
@@ -64,6 +65,7 @@ interface GroupChatStore {
   groups: GroupConversation[];
   activeGroup: GroupConversation | null;
   messages: GroupMessage[];
+  messageSenders: Record<string, { id: number; firstname: string | null; lastname: string | null; profilePicture: string | null }>; // userId -> user details from API
   typingUsers: Map<string, Set<number>>; // groupId -> Set of userIds typing
   chatableUsers: ChatUser[];
   systemNotifications: SystemNotification[]; // Notifications for member events
@@ -97,7 +99,7 @@ interface GroupChatStore {
   clearSystemNotifications: (groupId: string) => void;
 
   // Event handlers
-  handleIncomingGroupMessage: (data: GroupMessageReceivedPayload) => void;
+  handleIncomingGroupMessage: (data: GroupMessageReceivedPayload) => Promise<void>;
   handleGroupTyping: (data: GroupTypingIndicatorPayload) => void;
   handleGroupMessagesRead: (data: GroupMessagesReadPayload) => void;
   handleGroupMessageDelivered: (data: GroupMessageDeliveredPayload) => void;
@@ -116,6 +118,7 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
   groups: [],
   activeGroup: null,
   messages: [],
+  messageSenders: {},
   typingUsers: new Map(),
   chatableUsers: [],
   systemNotifications: [],
@@ -264,7 +267,13 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
     try {
       set({ isLoading: true });
       const response = await chatApi.getGroupMessages(groupId);
-      set({ messages: response.data.data.messages as unknown as GroupMessage[] });
+      const data = response.data.data;
+      const messages = data.messages as unknown as GroupMessage[];
+
+      set({
+        messages,
+        messageSenders: data.messageSenders || {},
+      });
     } catch (error) {
       console.error('Failed to fetch group messages:', error);
     } finally {
@@ -274,7 +283,7 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
 
   // Select a group and load messages
   selectGroup: async (group: GroupConversation) => {
-    set({ activeGroup: group, messages: [] });
+    set({ activeGroup: group, messages: [], messageSenders: {}, isLoading: true });
     await get().fetchGroupMessages(group._id);
 
     // Mark messages as read
@@ -563,10 +572,11 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
   },
 
   // Handle incoming group message
-  // Enterprise pattern: Server is source of truth for unread counts
-  handleIncomingGroupMessage: (data: GroupMessageReceivedPayload) => {
+  handleIncomingGroupMessage: async (data: GroupMessageReceivedPayload) => {
     const { message, conversation } = data;
     const { activeGroup } = get();
+    const currentUser = useAuthStore.getState().user;
+    const isOwnMessage = message.senderId === currentUser?.id;
 
     // Prevent duplicates
     if (processedMessageIds.has(message._id)) {
@@ -606,7 +616,10 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
       markGroupMessagesAsRead(conversation._id);
     }
 
-    // Update group metadata only (NOT unread count - server is source of truth)
+    // Optimistically increment unread for non-active groups (if not sent by us)
+    const shouldIncrementUnread = !isActiveGroup && message.senderId !== currentUser?.id;
+
+    // Update group metadata with optimistic unread count
     set((state) => {
       const existingIndex = state.groups.findIndex(
         (g) => g._id === conversation._id
@@ -614,8 +627,9 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
 
       if (existingIndex >= 0) {
         const updatedGroups = [...state.groups];
+        const existing = updatedGroups[existingIndex];
         updatedGroups[existingIndex] = {
-          ...updatedGroups[existingIndex],
+          ...existing,
           lastMessage: lastMessagePreview,
           lastMessageSenderId: message.senderId,
           lastMessageAt: message.createdAt,
@@ -624,8 +638,12 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
           lastMessageTargetUserId: null,
           lastMessageActorUserId: null,
           // For active group, keep unreadCount at 0 (we just marked as read)
-          // For inactive groups, don't change - fetchGroups will update
-          ...(isActiveGroup ? { unreadCount: 0 } : {}),
+          // For inactive groups, optimistically increment
+          ...(isActiveGroup
+            ? { unreadCount: 0 }
+            : shouldIncrementUnread
+              ? { unreadCount: (existing.unreadCount || 0) + 1 }
+              : {}),
         };
 
         // Move to top
@@ -633,7 +651,7 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
         return { groups: [updated, ...updatedGroups] };
       }
 
-      // New group - add it (will get accurate count from fetchGroups)
+      // New group - add it with optimistic count
       return {
         groups: [
           {
@@ -641,7 +659,7 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
             lastMessage: lastMessagePreview,
             lastMessageSenderId: message.senderId,
             lastMessageAt: message.createdAt,
-            unreadCount: 0, // Will be updated by fetchGroups
+            unreadCount: shouldIncrementUnread ? 1 : 0,
           },
           ...state.groups,
         ],
@@ -756,9 +774,9 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
         if (exists) {
           return state;
         }
-        // Add group with unreadCount: 0 for instant display, fetchGroups will sync real count
+        // Add group with unreadCount: 1 (system message always exists on creation), fetchGroups will sync real count
         return {
-          groups: [{ ...data.group!, unreadCount: 0 }, ...state.groups],
+          groups: [{ ...data.group!, unreadCount: 1 }, ...state.groups],
         };
       });
     }
@@ -809,6 +827,7 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
             }
           : state.activeGroup,
     }));
+
   },
 
   // Handle new members added (for existing members to see count increase)
@@ -834,20 +853,25 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
     const { activeGroup, messages } = get();
 
     // Only update if this is for the active group and message exists
-    if (activeGroup?._id === conversationId && messages.some((m) => m._id === tempId)) {
+    const hasTempMessage = activeGroup?._id === conversationId && messages.some((m) => m._id === tempId);
+    if (hasTempMessage) {
       set((state) => ({
         messages: state.messages.map((m) =>
           m._id === tempId ? { ...m, _id: messageId } : m
         ),
       }));
+      // Mark as processed so chat:group_message doesn't create a duplicate.
+      // Other sessions (multi-device) don't have the tempId and need to
+      // receive the full message via chat:group_message instead.
+      processedMessageIds.add(messageId);
     }
   },
 
   // Handle system message (WhatsApp-style permanent notifications)
-  // Enterprise pattern: Server is source of truth for unread counts
   handleGroupSystemMessage: (data: GroupSystemMessagePayload) => {
     const { groupId, message } = data;
     const { activeGroup } = get();
+    const currentUser = useAuthStore.getState().user;
 
     // Prevent duplicates
     if (processedMessageIds.has(message._id)) {
@@ -873,7 +897,10 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
       markGroupMessagesAsRead(groupId);
     }
 
-    // Update group metadata
+    // Optimistically increment unread for non-active groups (if not sent by us)
+    const shouldIncrementUnread = !isActiveGroup && message.senderId !== currentUser?.id;
+
+    // Update group metadata (include embedded names from system message for real-time display)
     const updatedGroupMetadata = {
       lastMessage: message.content,
       lastMessageAt: message.createdAt,
@@ -881,12 +908,20 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
       lastMessageSystemType: message.systemMessageType || null,
       lastMessageTargetUserId: message.targetUserId || null,
       lastMessageActorUserId: message.actorUserId || null,
+      lastMessageActorName: message.actorName || null,
+      lastMessageTargetName: message.targetName || null,
       ...(isActiveGroup ? { unreadCount: 0 } : {}),
     };
 
     set((state) => ({
       groups: state.groups.map((g) =>
-        g._id === groupId ? { ...g, ...updatedGroupMetadata } : g
+        g._id === groupId
+          ? {
+              ...g,
+              ...updatedGroupMetadata,
+              ...(shouldIncrementUnread ? { unreadCount: (g.unreadCount || 0) + 1 } : {}),
+            }
+          : g
       ),
       activeGroup:
         state.activeGroup?._id === groupId

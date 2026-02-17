@@ -9,7 +9,7 @@ import type { MessageAttachment as MessageAttachmentType } from '@/types';
 import { VoiceNotePlayer } from './VoiceNotePlayer';
 import { useUIStore } from '@/stores/ui.store';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const CHAT_API_URL = process.env.NEXT_PUBLIC_CHAT_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8006';
 
 interface MessageAttachmentProps {
   attachment: MessageAttachmentType;
@@ -58,7 +58,7 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
 
   const fullUrl = attachment.url.startsWith('http')
     ? attachment.url
-    : `${API_URL}${attachment.url}`;
+    : `${CHAT_API_URL}${attachment.url}`;
 
   const handleDownload = () => {
     const link = document.createElement('a');
@@ -146,7 +146,7 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
                 src={
                   attachment.thumbnailUrl.startsWith('http')
                     ? attachment.thumbnailUrl
-                    : `${API_URL}${attachment.thumbnailUrl}`
+                    : `${CHAT_API_URL}${attachment.thumbnailUrl}`
                 }
                 alt={attachment.originalFilename}
                 width={250}
@@ -156,7 +156,7 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
                 unoptimized
               />
             ) : (
-              <div className="w-[250px] h-[140px] bg-slate-800 rounded-lg flex items-center justify-center">
+              <div className="w-[250px] h-[140px] bg-slate-200 dark:bg-slate-800 rounded-lg flex items-center justify-center">
                 <Play className="w-12 h-12 text-white/70" />
               </div>
             )}
@@ -206,7 +206,7 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
           'flex items-center gap-3 p-3 rounded-lg cursor-pointer min-w-[180px] max-w-[250px]',
           isOwn
             ? 'bg-primary-500/30 hover:bg-primary-500/40'
-            : 'bg-slate-200/50 dark:bg-slate-700/50 hover:bg-slate-200/70 dark:hover:bg-slate-700/70'
+            : 'bg-slate-200/50 dark:bg-slate-600/30 hover:bg-slate-200/70 dark:hover:bg-slate-600/50'
         )}
         onClick={handleDownload}
       >

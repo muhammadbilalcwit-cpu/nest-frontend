@@ -1,5 +1,4 @@
-import { subscribe, emit, getSocket } from '../socket-manager';
-import { subscribeToUserStatusChanged } from './notification.events';
+import { chatSubscribe as subscribe, chatEmit as emit, getChatSocket as getSocket } from '../chat-socket';
 import type {
   SendMessagePayload,
   TypingPayload,
@@ -75,30 +74,22 @@ export const subscribeToTyping = (
 
 /**
  * Subscribe to user online status
- * Uses the shared user-status-changed event from NotificationsGateway
+ * FastAPI chat service emits 'user:online' directly
  */
 export const subscribeToUserOnline = (
   callback: (data: { userId: number }) => void
 ): (() => void) => {
-  return subscribeToUserStatusChanged((payload) => {
-    if (payload.isOnline) {
-      callback({ userId: payload.userId });
-    }
-  });
+  return subscribe('user:online', callback);
 };
 
 /**
  * Subscribe to user offline status
- * Uses the shared user-status-changed event from NotificationsGateway
+ * FastAPI chat service emits 'user:offline' directly
  */
 export const subscribeToUserOffline = (
   callback: (data: { userId: number }) => void
 ): (() => void) => {
-  return subscribeToUserStatusChanged((payload) => {
-    if (!payload.isOnline) {
-      callback({ userId: payload.userId });
-    }
-  });
+  return subscribe('user:offline', callback);
 };
 
 /**

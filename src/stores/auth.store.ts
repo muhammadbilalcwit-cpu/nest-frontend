@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { User, RoleSlug } from '@/types';
-import { authApi } from '@/services/api';
+import { authApi, chatApi, setChatToken, clearChatToken } from '@/services/api';
 import { connectSocket, disconnectSocket } from '@/services/socket-manager';
+import { connectChatSocket, disconnectChatSocket } from '@/services/chat-socket';
+
 
 // Prevents multiple simultaneous logout calls
 let isLoggingOut = false;
@@ -32,6 +34,7 @@ interface AuthStore {
   isAuthenticated: boolean;
   primaryRole: RoleSlug | null;
   redirectTo: string | null;
+  hasCompliancePolicy: boolean;
 
   fetchUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -78,6 +81,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   isAuthenticated: false,
   primaryRole: null,
   redirectTo: null,
+  hasCompliancePolicy: false,
 
   fetchUser: async () => {
     try {
@@ -90,6 +94,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isLoading: false,
       });
       connectSocket();
+      connectChatSocket();
+
+      // Check compliance policy in background (non-blocking)
+      chatApi.getComplianceScopedUsers()
+        .then(() => set({ hasCompliancePolicy: true }))
+        .catch(() => set({ hasCompliancePolicy: false }));
     } catch {
       set({ user: null, isAuthenticated: false, primaryRole: null, isLoading: false });
     }
@@ -98,7 +108,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true });
     try {
-      await authApi.login(email, password);
+      const res = await authApi.login(email, password);
+
+      // Store JWT in frontend-managed cookie for FastAPI chat requests
+      const token =
+        res.data?.data?.accessToken || res.headers?.['x-access-token'];
+      if (token) setChatToken(token);
+
       await get().fetchUser();
       set({ redirectTo: '/dashboard' });
     } catch (error) {
@@ -117,6 +133,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Ignore logout errors
     } finally {
       disconnectSocket();
+      disconnectChatSocket();
+      clearChatToken();
       isLoggingOut = false;
 
       if (errorCode) {
@@ -127,6 +145,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         user: null,
         isAuthenticated: false,
         primaryRole: null,
+        hasCompliancePolicy: false,
         redirectTo: '/login',
       });
     }

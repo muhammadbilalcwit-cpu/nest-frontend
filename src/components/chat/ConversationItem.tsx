@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, Button, Badge } from '@/components/ui';
+import { useChatStore } from '@/stores/chat.store';
 import type { ChatConversation } from '@/types';
 
 interface ConversationItemProps {
@@ -26,7 +27,9 @@ export function ConversationItem({
   isDeleting,
 }: ConversationItemProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const typingUsers = useChatStore((s) => s.typingUsers);
   const otherUser = conversation.otherUser;
+  const isTyping = otherUser ? typingUsers.has(otherUser.id) : false;
   const displayName = otherUser
     ? `${otherUser.firstname || ''} ${otherUser.lastname || ''}`.trim() || otherUser.email
     : 'Unknown User';
@@ -93,17 +96,23 @@ export function ConversationItem({
             )}
           </div>
           <div className="flex items-center justify-between mt-0.5">
-            <p
-              className={clsx(
-                'text-sm truncate',
-                isUnread
-                  ? 'text-slate-700 dark:text-dark-text font-medium'
-                  : 'text-slate-500 dark:text-dark-muted'
-              )}
-            >
-              {isSentByMe && 'You: '}
-              {conversation.lastMessage || 'No messages yet'}
-            </p>
+            {isTyping ? (
+              <p className="text-sm truncate text-green-500 dark:text-green-400 italic">
+                typing...
+              </p>
+            ) : (
+              <p
+                className={clsx(
+                  'text-sm truncate',
+                  isUnread
+                    ? 'text-slate-700 dark:text-dark-text font-medium'
+                    : 'text-slate-500 dark:text-dark-muted'
+                )}
+              >
+                {isSentByMe && 'You: '}
+                {conversation.lastMessage || 'No messages yet'}
+              </p>
+            )}
             {isUnread && (
               <Badge
                 label={String(conversation.unreadCount)}

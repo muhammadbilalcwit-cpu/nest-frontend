@@ -5,6 +5,7 @@ import { useAuthStore, flashErrorStorage } from '@/stores/auth.store';
 import { Alert, FormField, Button } from '@/components/ui';
 import { Building2, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
+
 // Flash message mapping - error codes to user-friendly messages
 const FLASH_MESSAGES: Record<string, string> = {
   session_expired: 'Your session has expired. Please log in again.',
@@ -42,6 +43,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
+
       // Redirect is handled reactively via useAuthRedirect hook
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };

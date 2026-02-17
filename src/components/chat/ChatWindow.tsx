@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send } from 'lucide-react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { Send, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, isToday, isYesterday } from 'date-fns';
 import { useChatStore } from '@/stores/chat.store';
@@ -51,10 +51,14 @@ export function ChatWindow() {
   const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [hasPendingVoiceNote, setHasPendingVoiceNote] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MentionInputRef>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevMessagesLengthRef = useRef<number>(0);
+  const isAtBottomRef = useRef(true);
+  const userSentMessageRef = useRef(false);
 
   const messages = useChatStore((s) => s.messages);
   const activeConversation = useChatStore((s) => s.activeConversation);
@@ -79,26 +83,102 @@ export function ChatWindow() {
     }];
   }, [otherUser]);
 
-  // Scroll to bottom when conversation changes (initial load)
+  // Scroll helper — always instant (WhatsApp style)
+  const scrollToBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
+  // Check if user is near the bottom of the scroll container
+  const checkIfAtBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 100; // px from bottom
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+
+  // Track scroll position to know if user is at bottom
   useEffect(() => {
-    if (activeConversation) {
-      // Reset the previous length when switching conversations
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const atBottom = checkIfAtBottom();
+      isAtBottomRef.current = atBottom;
+      if (atBottom) {
+        setNewMessageCount(0);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [checkIfAtBottom]);
+
+  // Track conversation switch
+  const prevConversationIdRef = useRef<string | null>(null);
+  const isNewConversationRef = useRef(false);
+  useEffect(() => {
+    if (activeConversation && activeConversation._id !== prevConversationIdRef.current) {
+      prevConversationIdRef.current = activeConversation._id;
       prevMessagesLengthRef.current = 0;
-      // Scroll to bottom after messages render with smooth animation
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 150);
-      return () => clearTimeout(timer);
+      isNewConversationRef.current = true;
+      isAtBottomRef.current = true;
+      setNewMessageCount(0);
     }
   }, [activeConversation]);
 
-  // Scroll to bottom when new messages are added
+  // Hide container before paint when opening a new conversation (prevents flash of unscrolled content)
+  useLayoutEffect(() => {
+    if (isNewConversationRef.current && messages.length > 0) {
+      const container = messagesContainerRef.current;
+      if (container) container.style.visibility = 'hidden';
+    }
+  }, [messages.length]);
+
+  // Scroll to bottom after browser fully resolves layout, then reveal
   useEffect(() => {
     if (messages.length > 0 && messages.length > prevMessagesLengthRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (isNewConversationRef.current) {
+        isNewConversationRef.current = false;
+        // rAF fires after paint, setTimeout(0) ensures task queue is flushed
+        // and flex + absolute layout is fully resolved
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            scrollToBottom();
+            isAtBottomRef.current = true;
+            const container = messagesContainerRef.current;
+            if (container) container.style.visibility = '';
+          }, 0);
+        });
+      } else if (userSentMessageRef.current) {
+        userSentMessageRef.current = false;
+        scrollToBottom();
+      } else if (isAtBottomRef.current) {
+        scrollToBottom();
+      } else {
+        const newCount = messages.length - prevMessagesLengthRef.current;
+        setNewMessageCount((prev) => prev + newCount);
+      }
     }
     prevMessagesLengthRef.current = messages.length;
-  }, [messages.length]);
+  }, [messages.length, scrollToBottom]);
+
+  // Auto-scroll when images/media finish loading — re-registers when
+  // isLoading changes so the listener is set up after container appears
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleLoad = () => {
+      if (isAtBottomRef.current) {
+        scrollToBottom();
+      }
+    };
+
+    container.addEventListener('load', handleLoad, true);
+    return () => container.removeEventListener('load', handleLoad, true);
+  }, [scrollToBottom, isLoading]);
 
   // Focus input on mount
   useEffect(() => {
@@ -127,6 +207,7 @@ export function ChatWindow() {
     if (isSending) return;
 
     setIsSending(true);
+    userSentMessageRef.current = true;
     const contentToSend = inputValue;
     const mentionsToSend = mentions;
     setInputValue('');
@@ -161,6 +242,7 @@ export function ChatWindow() {
   // Handle voice note ready (send immediately)
   const handleVoiceNoteReady = async (attachment: MessageAttachment) => {
     setIsSending(true);
+    userSentMessageRef.current = true;
 
     const success = await sendMessage('', attachment);
 
@@ -177,6 +259,12 @@ export function ChatWindow() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Handle "jump to bottom" button
+  const handleJumpToBottom = () => {
+    scrollToBottom();
+    setNewMessageCount(0);
   };
 
   // Check if we can send (has content or attachment)
@@ -196,30 +284,45 @@ export function ChatWindow() {
   return (
     <div className="h-full flex flex-col">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
-        {groupedMessages.map((group) => (
-          <div key={group.date}>
-            {/* Date separator */}
-            <div className="flex items-center justify-center my-4">
-              <span className="px-3 py-1 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-800 rounded-full">
-                {formatDateLabel(group.date)}
-              </span>
-            </div>
+      <div className="relative flex-1">
+        <div ref={messagesContainerRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4 space-y-4">
+          {groupedMessages.map((group) => (
+            <div key={group.date}>
+              {/* Date separator */}
+              <div className="flex items-center justify-center my-4">
+                <span className="px-3 py-1 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-700 rounded-full">
+                  {formatDateLabel(group.date)}
+                </span>
+              </div>
 
-            {/* Messages for this date */}
-            <div className="space-y-2">
-              {group.messages.map((message) => (
-                <MessageBubble
-                  key={message._id}
-                  message={message}
-                  isOwn={message.senderId === user?.id}
-                />
-              ))}
+              {/* Messages for this date */}
+              <div className="space-y-2">
+                {group.messages.map((message) => (
+                  <MessageBubble
+                    key={message._id}
+                    message={message}
+                    isOwn={message.senderId === user?.id}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Jump to bottom button (WhatsApp style) */}
+        {newMessageCount > 0 && (
+          <button
+            onClick={handleJumpToBottom}
+            className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-700 text-primary-600 dark:text-primary-400 rounded-full shadow-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors z-10"
+          >
+            <ChevronDown className="w-4 h-4" />
+            <span className="text-xs font-medium">
+              {newMessageCount} new {newMessageCount === 1 ? 'message' : 'messages'}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Typing indicator */}

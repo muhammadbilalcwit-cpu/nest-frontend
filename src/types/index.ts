@@ -283,6 +283,21 @@ export interface ActivityLogsParams {
   search?: string;
 }
 
+// ─── Compliance Types ─────────────────────────────────────────────────────────
+
+export interface MessageSender {
+  id: number;
+  firstname: string | null;
+  lastname: string | null;
+  profilePicture: string | null;
+}
+
+export interface ConversationInfo {
+  groupName: string;
+  groupAvatar: string | null;
+  isGroup: boolean;
+}
+
 // ─── Chat Types ────────────────────────────────────────────────────────────────
 
 export interface ChatUser {
@@ -424,6 +439,8 @@ export interface GroupConversation {
   lastMessageSystemType?: SystemMessageType | null;
   lastMessageTargetUserId?: number | null;
   lastMessageActorUserId?: number | null;
+  lastMessageActorName?: string | null;
+  lastMessageTargetName?: string | null;
 }
 
 /**
@@ -456,6 +473,8 @@ export interface GroupMessage {
   systemMessageType?: SystemMessageType;
   targetUserId?: number | null;
   actorUserId?: number | null;
+  actorName?: string | null;
+  targetName?: string | null;
   // Attachment field
   attachment?: MessageAttachment | null;
   // Mentions fields

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send } from 'lucide-react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { Send, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, isToday, isYesterday } from 'date-fns';
 import { useGroupChatStore } from '@/stores/group-chat.store';
@@ -53,10 +53,14 @@ export function GroupChatWindow() {
   const [pendingAttachment, setPendingAttachment] = useState<MessageAttachment | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [hasPendingVoiceNote, setHasPendingVoiceNote] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MentionInputRef>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const prevMessagesLengthRef = useRef<number>(0);
+  const isAtBottomRef = useRef(true);
+  const userSentMessageRef = useRef(false);
 
   const messages = useGroupChatStore((s) => s.messages);
   const activeGroup = useGroupChatStore((s) => s.activeGroup);
@@ -64,11 +68,12 @@ export function GroupChatWindow() {
   const setTyping = useGroupChatStore((s) => s.setTyping);
   const typingUsers = useGroupChatStore((s) => s.typingUsers);
   const isLoading = useGroupChatStore((s) => s.isLoading);
+  const messageSenders = useGroupChatStore((s) => s.messageSenders);
 
   const chatableUsers = useChatStore((s) => s.chatableUsers);
   const user = useAuthStore((s) => s.user);
 
-  // Create a map of users for quick lookup
+  // Create a map of users for quick lookup (chatableUsers + group members + messageSenders from API)
   const userMap = useMemo(() => {
     const map = new Map<number, { firstname: string | null; lastname: string | null; profilePicture: string | null }>();
     chatableUsers.forEach((u) => {
@@ -78,6 +83,28 @@ export function GroupChatWindow() {
         profilePicture: u.profilePicture,
       });
     });
+    // Add group members (handles cross-role visibility — e.g. company_admin in a group with regular users)
+    activeGroup?.members?.forEach((m) => {
+      if (!map.has(m.id)) {
+        map.set(m.id, {
+          firstname: m.firstname,
+          lastname: m.lastname,
+          profilePicture: m.profilePicture || null,
+        });
+      }
+    });
+    // Add messageSenders from API (handles former members, cross-company users)
+    if (messageSenders) {
+      Object.values(messageSenders).forEach((s) => {
+        if (!map.has(s.id)) {
+          map.set(s.id, {
+            firstname: s.firstname,
+            lastname: s.lastname,
+            profilePicture: s.profilePicture || null,
+          });
+        }
+      });
+    }
     // Add current user
     if (user) {
       map.set(user.id, {
@@ -87,7 +114,7 @@ export function GroupChatWindow() {
       });
     }
     return map;
-  }, [chatableUsers, user]);
+  }, [chatableUsers, activeGroup?.members, messageSenders, user]);
 
   // Get typing users for current group
   const groupTypingUsers = activeGroup
@@ -110,26 +137,102 @@ export function GroupChatWindow() {
       });
   }, [activeGroup?.participants, user, userMap]);
 
-  // Scroll to bottom when group changes (initial load)
+  // Scroll helper — always instant (WhatsApp style)
+  const scrollToBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
+  // Check if user is near the bottom of the scroll container
+  const checkIfAtBottom = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 100;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  }, []);
+
+  // Track scroll position to know if user is at bottom
   useEffect(() => {
-    if (activeGroup) {
-      // Reset the previous length when switching groups
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const atBottom = checkIfAtBottom();
+      isAtBottomRef.current = atBottom;
+      if (atBottom) {
+        setNewMessageCount(0);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [checkIfAtBottom]);
+
+  // Track group switch
+  const prevGroupIdRef = useRef<string | null>(null);
+  const isNewGroupRef = useRef(false);
+  useEffect(() => {
+    if (activeGroup && activeGroup._id !== prevGroupIdRef.current) {
+      prevGroupIdRef.current = activeGroup._id;
       prevMessagesLengthRef.current = 0;
-      // Scroll to bottom after messages render with smooth animation
-      const timer = setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 150);
-      return () => clearTimeout(timer);
+      isNewGroupRef.current = true;
+      isAtBottomRef.current = true;
+      setNewMessageCount(0);
     }
   }, [activeGroup]);
 
-  // Scroll to bottom when new messages are added
+  // Hide container before paint when opening a new group (prevents flash of unscrolled content)
+  useLayoutEffect(() => {
+    if (isNewGroupRef.current && messages.length > 0) {
+      const container = messagesContainerRef.current;
+      if (container) container.style.visibility = 'hidden';
+    }
+  }, [messages.length]);
+
+  // Scroll to bottom after browser fully resolves layout, then reveal
   useEffect(() => {
     if (messages.length > 0 && messages.length > prevMessagesLengthRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (isNewGroupRef.current) {
+        isNewGroupRef.current = false;
+        // rAF fires after paint, setTimeout(0) ensures task queue is flushed
+        // and flex + absolute layout is fully resolved
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            scrollToBottom();
+            isAtBottomRef.current = true;
+            const container = messagesContainerRef.current;
+            if (container) container.style.visibility = '';
+          }, 0);
+        });
+      } else if (userSentMessageRef.current) {
+        userSentMessageRef.current = false;
+        scrollToBottom();
+      } else if (isAtBottomRef.current) {
+        scrollToBottom();
+      } else {
+        const newCount = messages.length - prevMessagesLengthRef.current;
+        setNewMessageCount((prev) => prev + newCount);
+      }
     }
     prevMessagesLengthRef.current = messages.length;
-  }, [messages.length]);
+  }, [messages.length, scrollToBottom]);
+
+  // Auto-scroll when images/media finish loading — re-registers when
+  // isLoading changes so the listener is set up after container appears
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleLoad = () => {
+      if (isAtBottomRef.current) {
+        scrollToBottom();
+      }
+    };
+
+    container.addEventListener('load', handleLoad, true);
+    return () => container.removeEventListener('load', handleLoad, true);
+  }, [scrollToBottom, isLoading]);
 
   // Focus input on mount
   useEffect(() => {
@@ -158,6 +261,7 @@ export function GroupChatWindow() {
     if (isSending) return;
 
     setIsSending(true);
+    userSentMessageRef.current = true;
     const contentToSend = inputValue;
     const mentionsToSend = mentions;
     const mentionsAllToSend = mentionsAll;
@@ -196,6 +300,7 @@ export function GroupChatWindow() {
   // Handle voice note ready (send immediately)
   const handleVoiceNoteReady = async (attachment: MessageAttachment) => {
     setIsSending(true);
+    userSentMessageRef.current = true;
 
     const success = await sendMessage('', attachment);
 
@@ -212,6 +317,12 @@ export function GroupChatWindow() {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Handle "jump to bottom" button
+  const handleJumpToBottom = () => {
+    scrollToBottom();
+    setNewMessageCount(0);
   };
 
   // Check if we can send (has content or attachment)
@@ -236,12 +347,19 @@ export function GroupChatWindow() {
     const isTargetCurrentUser = targetUserId === user?.id;
     const isActorCurrentUser = actorUserId === user?.id;
 
+    // Use userMap first, then embedded names from system message as fallback
     const targetName = isTargetCurrentUser
       ? 'you'
-      : getSenderName(targetUserId);
+      : getSenderName(targetUserId) !== 'Unknown'
+        ? getSenderName(targetUserId)
+        : (message.targetName || 'Unknown');
 
     const actorName = actorUserId
-      ? (isActorCurrentUser ? 'You' : getSenderName(actorUserId))
+      ? (isActorCurrentUser
+          ? 'You'
+          : getSenderName(actorUserId) !== 'Unknown'
+            ? getSenderName(actorUserId)
+            : (message.actorName || 'Unknown'))
       : '';
 
     switch (systemMessageType) {
@@ -287,56 +405,71 @@ export function GroupChatWindow() {
   return (
     <div className="h-full flex flex-col">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
-        {groupedMessages.map((group) => (
-          <div key={group.date}>
-            {/* Date separator */}
-            <div className="flex items-center justify-center my-4">
-              <span className="px-3 py-1 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-800 rounded-full">
-                {formatDateLabel(group.date)}
-              </span>
-            </div>
+      <div className="relative flex-1">
+        <div ref={messagesContainerRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4 space-y-4">
+          {groupedMessages.map((group) => (
+            <div key={group.date}>
+              {/* Date separator */}
+              <div className="flex items-center justify-center my-4">
+                <span className="px-3 py-1 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-700 rounded-full">
+                  {formatDateLabel(group.date)}
+                </span>
+              </div>
 
-            {/* Messages for this date */}
-            <div className="space-y-3">
-              {group.messages.map((message) => {
-                // System message - render WhatsApp-style centered notification
-                if (message.isSystemMessage) {
+              {/* Messages for this date */}
+              <div className="space-y-3">
+                {group.messages.map((message) => {
+                  // System message - render WhatsApp-style centered notification
+                  if (message.isSystemMessage) {
+                    return (
+                      <div
+                        key={message._id}
+                        className="flex justify-center my-2"
+                      >
+                        <span className="px-3 py-1.5 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-700/50 rounded-lg shadow-sm">
+                          {getSystemMessageText(message)}
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  // Regular message
+                  const isOwn = message.senderId === user?.id;
+                  const sender = userMap.get(message.senderId);
+                  const senderName = getSenderName(message.senderId);
+                  // Total members excluding sender for status calculation
+                  const totalMembers = (activeGroup?.participants?.length || 1) - 1;
+
                   return (
-                    <div
+                    <GroupMessageBubble
                       key={message._id}
-                      className="flex justify-center my-2"
-                    >
-                      <span className="px-3 py-1.5 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-800/50 rounded-lg shadow-sm">
-                        {getSystemMessageText(message)}
-                      </span>
-                    </div>
+                      message={message}
+                      isOwn={isOwn}
+                      senderName={senderName}
+                      senderAvatar={sender?.profilePicture}
+                      totalMembers={totalMembers}
+                    />
                   );
-                }
-
-                // Regular message
-                const isOwn = message.senderId === user?.id;
-                const sender = userMap.get(message.senderId);
-                const senderName = getSenderName(message.senderId);
-                // Total members excluding sender for status calculation
-                const totalMembers = (activeGroup?.participants?.length || 1) - 1;
-
-                return (
-                  <GroupMessageBubble
-                    key={message._id}
-                    message={message}
-                    isOwn={isOwn}
-                    senderName={senderName}
-                    senderAvatar={sender?.profilePicture}
-                    totalMembers={totalMembers}
-                  />
-                );
-              })}
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Jump to bottom button (WhatsApp style) */}
+        {newMessageCount > 0 && (
+          <button
+            onClick={handleJumpToBottom}
+            className="absolute bottom-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-700 text-primary-600 dark:text-primary-400 rounded-full shadow-lg border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors z-10"
+          >
+            <ChevronDown className="w-4 h-4" />
+            <span className="text-xs font-medium">
+              {newMessageCount} new {newMessageCount === 1 ? 'message' : 'messages'}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Typing indicator */}

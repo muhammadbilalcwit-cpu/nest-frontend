@@ -24,9 +24,13 @@ import type {
   UpdateGroupPayload,
   AddGroupMembersPayload,
   GroupMessageInfo,
+  MessageSender,
+  ConversationInfo,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+const CHAT_API_BASE_URL =
+  process.env.NEXT_PUBLIC_CHAT_API_URL || API_BASE_URL;
 
 // Custom event for force logout (used when token refresh fails due to inactive user)
 export const FORCE_LOGOUT_EVENT = "force-logout";
@@ -107,7 +111,13 @@ api.interceptors.response.use(
 
     try {
       // Attempt to refresh the token
-      await api.post("/auth/refresh");
+      const refreshRes = await api.post("/auth/refresh");
+
+      // Update the frontend-managed chatToken with the new access token
+      const newToken =
+        refreshRes.data?.data?.accessToken ||
+        refreshRes.headers?.["x-access-token"];
+      if (newToken) setChatToken(newToken);
 
       // Token refreshed successfully, process queued requests
       processQueue(null);
@@ -121,6 +131,90 @@ api.interceptors.response.use(
       // Trigger force logout to clear cookies and redirect
       triggerForceLogout();
 
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
+  },
+);
+
+// Read chatToken cookie (frontend-managed, for cross-origin FastAPI requests)
+export function getAccessToken(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const row = document.cookie
+    .split("; ")
+    .find((r) => r.startsWith("chatToken="));
+  if (!row) return undefined;
+  // Use substring to avoid truncating JWTs that may contain '=' characters
+  return row.substring("chatToken=".length);
+}
+
+// Store JWT as a frontend-managed cookie (simulates Next Auth cookie flow)
+export function setChatToken(token: string): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `chatToken=${token}; path=/; max-age=${15 * 60}; SameSite=Lax`;
+}
+
+// Clear the frontend-managed chat token cookie
+export function clearChatToken(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = "chatToken=; path=/; max-age=0";
+}
+
+// ── Chat API instance (points to FastAPI microservice) ──
+const chatApiInstance = axios.create({
+  baseURL: CHAT_API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// Send accessToken as Bearer header for cross-origin requests to FastAPI
+chatApiInstance.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 401 interceptor for chatApiInstance — refresh token via NestJS, then retry
+chatApiInstance.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+    };
+
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error);
+    }
+
+    // If already refreshing (from either interceptor), queue this request
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      })
+        .then(() => chatApiInstance(originalRequest))
+        .catch((err) => Promise.reject(err));
+    }
+
+    originalRequest._retry = true;
+    isRefreshing = true;
+
+    try {
+      const refreshRes = await api.post("/auth/refresh");
+      const newToken =
+        refreshRes.data?.data?.accessToken ||
+        refreshRes.headers?.["x-access-token"];
+      if (newToken) setChatToken(newToken);
+
+      processQueue(null);
+      return chatApiInstance(originalRequest);
+    } catch (refreshError) {
+      processQueue(refreshError as Error);
+      triggerForceLogout();
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
@@ -367,39 +461,50 @@ export const activeSessionsApi = {
     ),
 };
 
-// Chat endpoints (for managers and users only)
+// Chat endpoints — uses chatApiInstance (FastAPI microservice)
 export const chatApi = {
+  // Get client-facing config (delete window, size limits, etc.)
+  getChatConfig: () =>
+    chatApiInstance.get<ApiResponse<{
+      deleteForEveryoneHours: number;
+      maxImageSize: number;
+      maxVideoSize: number;
+      maxDocumentSize: number;
+      maxVoiceSize: number;
+      chatAccessRoles: string[];
+    }>>("/chat/config"),
+
   // Get all users the current user can chat with
   getChatableUsers: () =>
-    api.get<ApiResponse<ChatUser[]>>("/chat/users"),
+    chatApiInstance.get<ApiResponse<ChatUser[]>>("/chat/users"),
 
   // Get all conversations for the current user
   getConversations: () =>
-    api.get<ApiResponse<ChatConversation[]>>("/chat/conversations"),
+    chatApiInstance.get<ApiResponse<ChatConversation[]>>("/chat/conversations"),
 
   // Get or create a conversation with a user
   getOrCreateConversation: (userId: number) =>
-    api.post<ApiResponse<ChatConversation>>(`/chat/conversations/${userId}`),
+    chatApiInstance.post<ApiResponse<ChatConversation>>(`/chat/conversations/${userId}`),
 
   // Get messages for a conversation
   getMessages: (conversationId: string, page = 1, limit = 50) =>
-    api.get<ApiResponse<{ messages: ChatMessage[]; total: number }>>(
+    chatApiInstance.get<ApiResponse<{ messages: ChatMessage[]; total: number }>>(
       `/chat/conversations/${conversationId}/messages?page=${page}&limit=${limit}`
     ),
 
   // Get unread message count (total, direct, and groups)
   getUnreadCount: () =>
-    api.get<ApiResponse<{ count: number; direct: number; groups: number }>>("/chat/unread-count"),
+    chatApiInstance.get<ApiResponse<{ count: number; direct: number; groups: number }>>("/chat/unread-count"),
 
   // Delete a conversation (soft delete)
   deleteConversation: (conversationId: string) =>
-    api.delete<ApiResponse<{ deleted: boolean }>>(
+    chatApiInstance.delete<ApiResponse<{ deleted: boolean }>>(
       `/chat/conversations/${conversationId}`
     ),
 
   // Delete a message
   deleteMessage: (messageId: string, forEveryone = false) =>
-    api.delete<ApiResponse<{ deleted: boolean; forEveryone: boolean }>>(
+    chatApiInstance.delete<ApiResponse<{ deleted: boolean; forEveryone: boolean }>>(
       `/chat/messages/${messageId}?forEveryone=${forEveryone}`
     ),
 
@@ -407,64 +512,64 @@ export const chatApi = {
 
   // Create a new group
   createGroup: (data: CreateGroupPayload) =>
-    api.post<ApiResponse<GroupConversation>>("/chat/groups", data),
+    chatApiInstance.post<ApiResponse<GroupConversation>>("/chat/groups", data),
 
   // Get all groups for current user
-  getGroups: () => api.get<ApiResponse<GroupConversation[]>>("/chat/groups"),
+  getGroups: () => chatApiInstance.get<ApiResponse<GroupConversation[]>>("/chat/groups"),
 
   // Get group details
   getGroup: (groupId: string) =>
-    api.get<ApiResponse<GroupConversation>>(`/chat/groups/${groupId}`),
+    chatApiInstance.get<ApiResponse<GroupConversation>>(`/chat/groups/${groupId}`),
 
   // Update group info (name, avatar)
   updateGroup: (groupId: string, data: UpdateGroupPayload) =>
-    api.patch<ApiResponse<GroupConversation>>(`/chat/groups/${groupId}`, data),
+    chatApiInstance.patch<ApiResponse<GroupConversation>>(`/chat/groups/${groupId}`, data),
 
   // Upload group avatar (admin only)
   uploadGroupAvatar: (groupId: string, formData: FormData) =>
-    api.post<ApiResponse<{ avatarUrl: string }>>(`/chat/groups/${groupId}/avatar`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    chatApiInstance.post<ApiResponse<{ avatarUrl: string }>>(`/chat/groups/${groupId}/avatar`, formData, {
+      headers: { 'Content-Type': undefined },
     }),
 
   // Add members to group
   addGroupMembers: (groupId: string, data: AddGroupMembersPayload) =>
-    api.post<ApiResponse<GroupConversation>>(
+    chatApiInstance.post<ApiResponse<GroupConversation>>(
       `/chat/groups/${groupId}/members`,
       data
     ),
 
   // Remove member from group
   removeGroupMember: (groupId: string, memberId: number) =>
-    api.delete<ApiResponse<GroupConversation>>(
+    chatApiInstance.delete<ApiResponse<GroupConversation>>(
       `/chat/groups/${groupId}/members/${memberId}`
     ),
 
   // Leave a group (any member can leave, admin can specify new admin)
   leaveGroup: (groupId: string, newAdminId?: number) =>
-    api.post<ApiResponse<{ left: boolean; newAdminId?: number }>>(
+    chatApiInstance.post<ApiResponse<{ left: boolean; newAdminId?: number }>>(
       `/chat/groups/${groupId}/leave`,
       newAdminId ? { newAdminId } : {}
     ),
 
   // Delete a group (admin only)
   deleteGroup: (groupId: string) =>
-    api.delete<ApiResponse<{ deleted: boolean }>>(`/chat/groups/${groupId}`),
+    chatApiInstance.delete<ApiResponse<{ deleted: boolean }>>(`/chat/groups/${groupId}`),
 
   // Get group messages
   getGroupMessages: (groupId: string, page = 1, limit = 50) =>
-    api.get<ApiResponse<{ messages: GroupMessage[]; total: number }>>(
+    chatApiInstance.get<ApiResponse<{ messages: GroupMessage[]; total: number; messageSenders?: Record<string, { id: number; firstname: string | null; lastname: string | null; profilePicture: string | null }> }>>(
       `/chat/groups/${groupId}/messages?page=${page}&limit=${limit}`
     ),
 
   // Mark group messages as read
   markGroupAsRead: (groupId: string) =>
-    api.post<ApiResponse<{ markedCount: number }>>(
+    chatApiInstance.post<ApiResponse<{ markedCount: number }>>(
       `/chat/groups/${groupId}/read`
     ),
 
   // Get message info (delivery/read status for group messages)
   getMessageInfo: (messageId: string) =>
-    api.get<ApiResponse<GroupMessageInfo>>(`/chat/messages/${messageId}/info`),
+    chatApiInstance.get<ApiResponse<GroupMessageInfo>>(`/chat/messages/${messageId}/info`),
 
   // ==================== ATTACHMENT ENDPOINTS ====================
 
@@ -472,7 +577,7 @@ export const chatApi = {
   uploadAttachment: (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    return api.post<
+    return chatApiInstance.post<
       ApiResponse<{
         type: "image" | "video" | "document" | "voice";
         url: string;
@@ -482,9 +587,27 @@ export const chatApi = {
         mimeType: string;
       }>
     >("/chat/attachments", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+      headers: { "Content-Type": undefined },
     });
   },
+
+  // ==================== COMPLIANCE ENDPOINTS ====================
+
+  // Get users within officer's compliance policy scope
+  getComplianceScopedUsers: () =>
+    chatApiInstance.get<ApiResponse<ChatUser[]>>("/chat/compliance/users"),
+
+  // Get messages by conversation (compliance access, audited)
+  getComplianceConversationMessages: (conversationId: string, page = 1, limit = 50) =>
+    chatApiInstance.get<ApiResponse<{ messages: ChatMessage[]; total: number; hasMore: boolean; messageSenders?: Record<string, MessageSender> }>>(
+      `/chat/compliance/conversations/${conversationId}/messages?page=${page}&limit=${limit}`
+    ),
+
+  // Get messages by user (compliance access, audited)
+  getComplianceUserMessages: (userId: number, page = 1, limit = 50) =>
+    chatApiInstance.get<ApiResponse<{ messages: ChatMessage[]; total: number; hasMore: boolean; messageSenders?: Record<string, MessageSender>; conversationInfo?: Record<string, ConversationInfo> }>>(
+      `/chat/compliance/users/${userId}/messages?page=${page}&limit=${limit}`
+    ),
 
   // Upload a voice note
   uploadVoiceNote: (file: Blob, duration?: number, waveform?: number[]) => {
@@ -496,7 +619,7 @@ export const chatApi = {
     if (waveform) {
       formData.append("waveform", JSON.stringify(waveform));
     }
-    return api.post<
+    return chatApiInstance.post<
       ApiResponse<{
         type: "voice";
         url: string;
@@ -508,9 +631,10 @@ export const chatApi = {
         waveform?: number[];
       }>
     >("/chat/attachments/voice", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+      headers: { "Content-Type": undefined },
     });
   },
+
 };
 
 export default api;

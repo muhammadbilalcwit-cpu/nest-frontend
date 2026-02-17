@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { createPortal } from 'react-dom';
 import { Avatar, Button } from '@/components/ui';
 import { useAuthStore } from '@/stores/auth.store';
+import { useChatStore } from '@/stores/chat.store';
 import { useGroupChatStore } from '@/stores/group-chat.store';
 import { MessageInfoModal } from './MessageInfoModal';
 import { MessageAttachment } from './MessageAttachment';
@@ -37,6 +38,11 @@ export function GroupMessageBubble({
   const menuRef = useRef<HTMLDivElement>(null);
   const user = useAuthStore((s) => s.user);
   const deleteMessage = useGroupChatStore((s) => s.deleteMessage);
+
+  // WhatsApp-style: only show "Delete for everyone" within time window (from backend config)
+  const deleteForEveryoneHours = useChatStore((s) => s.chatConfig.deleteForEveryoneHours);
+  const canDeleteForEveryone = isOwn &&
+    (Date.now() - new Date(message.createdAt).getTime()) / (1000 * 60 * 60) <= deleteForEveryoneHours;
 
   // Calculate menu position when opening
   useEffect(() => {
@@ -162,7 +168,7 @@ export function GroupMessageBubble({
                 'px-4 py-2 rounded-2xl',
                 isOwn
                   ? 'bg-primary-400/50 rounded-br-md'
-                  : 'bg-slate-100/50 dark:bg-slate-800/50 rounded-bl-md'
+                  : 'bg-slate-100/50 dark:bg-slate-700/50 rounded-bl-md'
               )}
             >
               <p className="text-sm italic flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -226,7 +232,7 @@ export function GroupMessageBubble({
                   ? 'bg-primary-600 text-white rounded-br-md'
                   : isMentioned
                     ? 'bg-amber-100 dark:bg-amber-900/30 text-slate-900 dark:text-white rounded-bl-md border-l-4 border-amber-400 dark:border-amber-500'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-bl-md',
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-bl-md',
                 // Only add padding if there's text content
                 hasAttachment && !hasText ? 'p-1' : 'px-4 py-2'
               )}
@@ -353,7 +359,7 @@ export function GroupMessageBubble({
                     >
                       Delete for me
                     </Button>
-                    {isOwn && (
+                    {canDeleteForEveryone && (
                       <Button
                         variant="danger"
                         onMouseDown={(e) => e.nativeEvent.stopImmediatePropagation()}

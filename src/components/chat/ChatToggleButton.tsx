@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react';
 import { MessageCircle } from 'lucide-react';
-import clsx from 'clsx';
 import { useChatStore } from '@/stores/chat.store';
 import { useGroupChatStore } from '@/stores/group-chat.store';
 import { useAuthStore } from '@/stores/auth.store';
@@ -21,11 +20,13 @@ export function ChatToggleButton() {
   const unreadCount = directUnreadCount + groupUnreadCount;
 
   const hasRole = useAuthStore((s) => s.hasRole);
+  const chatAccessRoles = useChatStore((s) => s.chatConfig.chatAccessRoles);
 
-  // Only show for managers and users (not admins)
-  const canAccessChat = hasRole(['manager', 'user']);
+  // Show chat only for roles defined in backend config
+  const canAccessChat = chatAccessRoles.length > 0 && hasRole(chatAccessRoles as import('@/types').RoleSlug[]);
 
-  if (!canAccessChat) {
+  // Hide FAB when chat window is open (floating window replaces it)
+  if (!canAccessChat || isOpen) {
     return null;
   }
 
@@ -35,15 +36,11 @@ export function ChatToggleButton() {
         data-chat-toggle
         onClick={toggleChat}
         icon={<MessageCircle className="w-6 h-6" />}
-        className={clsx(
-          '!p-4 !rounded-full shadow-lg transition-all',
-          'hover:scale-105 active:scale-95',
-          isOpen && '!bg-slate-600 hover:!bg-slate-700'
-        )}
+        className="!p-4 !rounded-full shadow-lg transition-all hover:scale-105 active:scale-95"
       />
 
       {/* Unread badge */}
-      {unreadCount > 0 && !isOpen && (
+      {unreadCount > 0 && (
         <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-xs font-bold bg-red-500 text-white rounded-full">
           {unreadCount > 99 ? '99+' : unreadCount}
         </span>

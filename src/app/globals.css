@@ -6,11 +6,13 @@
   :root {
     --background: 255 255 255;
     --foreground: 15 23 42;
+    color-scheme: light;
   }
 
   .dark {
     --background: 15 23 42;
     --foreground: 226 232 240;
+    color-scheme: dark;
   }
 }
 
@@ -82,7 +84,7 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar - WebKit (Chrome, Edge, Safari) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -98,6 +100,16 @@
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-400 dark:bg-slate-500;
+}
+
+/* Custom scrollbar - Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.dark * {
+  scrollbar-color: #475569 #1e293b;
 }
 
 /* Notification animation */

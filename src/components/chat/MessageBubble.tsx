@@ -27,6 +27,11 @@ export function MessageBubble({ message, isOwn }: MessageBubbleProps) {
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const user = useAuthStore((s) => s.user);
 
+  // WhatsApp-style: only show "Delete for everyone" within time window (from backend config)
+  const deleteForEveryoneHours = useChatStore((s) => s.chatConfig.deleteForEveryoneHours);
+  const canDeleteForEveryone = isOwn &&
+    (Date.now() - new Date(message.createdAt).getTime()) / (1000 * 60 * 60) <= deleteForEveryoneHours;
+
   // Calculate menu position when opening
   useEffect(() => {
     if (showDeleteMenu && deleteButtonRef.current) {
@@ -96,7 +101,7 @@ export function MessageBubble({ message, isOwn }: MessageBubbleProps) {
             'max-w-[75%] px-4 py-2 rounded-2xl',
             isOwn
               ? 'bg-primary-400/50 rounded-br-md'
-              : 'bg-slate-100/50 dark:bg-slate-800/50 rounded-bl-md'
+              : 'bg-slate-100/50 dark:bg-slate-700/50 rounded-bl-md'
           )}
         >
           <p className="text-sm italic flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -127,7 +132,7 @@ export function MessageBubble({ message, isOwn }: MessageBubbleProps) {
             'rounded-2xl overflow-hidden',
             isOwn
               ? 'bg-primary-600 text-white rounded-br-md'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white rounded-bl-md',
+              : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-bl-md',
             // Only add padding if there's text content
             hasAttachment && !hasText ? 'p-1' : 'px-4 py-2'
           )}
@@ -224,7 +229,7 @@ export function MessageBubble({ message, isOwn }: MessageBubbleProps) {
               >
                 Delete for me
               </Button>
-              {isOwn && (
+              {canDeleteForEveryone && (
                 <Button
                   variant="danger"
                   onMouseDown={(e) => e.nativeEvent.stopImmediatePropagation()}

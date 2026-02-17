@@ -17,10 +17,18 @@ export function VoiceNotePlayer({ url, duration, waveform, isOwn }: VoiceNotePla
   const [audioDuration, setAudioDuration] = useState(duration || 0);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Generate default waveform if not provided
-  const displayWaveform = waveform?.length
+  // Cap waveform to 28 bars max (downsample if backend provides more)
+  const maxBars = 28;
+  const rawWaveform = waveform?.length
     ? waveform
-    : Array.from({ length: 40 }, () => Math.random() * 0.8 + 0.2);
+    : Array.from({ length: maxBars }, () => Math.random() * 0.8 + 0.2);
+  const displayWaveform =
+    rawWaveform.length > maxBars
+      ? Array.from({ length: maxBars }, (_, i) => {
+          const idx = Math.floor((i * rawWaveform.length) / maxBars);
+          return rawWaveform[idx];
+        })
+      : rawWaveform;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -86,10 +94,10 @@ export function VoiceNotePlayer({ url, duration, waveform, isOwn }: VoiceNotePla
   return (
     <div
       className={clsx(
-        'flex items-center gap-3 p-3 rounded-2xl min-w-[200px] max-w-[280px]',
+        'flex items-center gap-3 py-3 pl-3 pr-5 rounded-2xl min-w-[200px] max-w-[280px]',
         isOwn
           ? 'bg-primary-500/20'
-          : 'bg-slate-200/50 dark:bg-slate-700/50'
+          : 'bg-slate-200/50 dark:bg-slate-600/30'
       )}
     >
       <audio ref={audioRef} src={url} preload="metadata" />
@@ -125,7 +133,7 @@ export function VoiceNotePlayer({ url, duration, waveform, isOwn }: VoiceNotePla
               <div
                 key={index}
                 className={clsx(
-                  'w-[3px] rounded-full transition-colors',
+                  'w-[3px] flex-shrink-0 rounded-full transition-colors',
                   isActive
                     ? isOwn
                       ? 'bg-primary-400'
