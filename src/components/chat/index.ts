@@ -7,3 +7,4 @@ export { ChatTabs } from './ChatTabs';
 export { ConversationItem } from './ConversationItem';
 export { UserItem } from './UserItem';
 export { MessageBubble } from './MessageBubble';
+export { SupportCustomerPanel } from './SupportCustomerPanel';

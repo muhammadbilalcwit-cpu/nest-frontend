@@ -229,10 +229,10 @@ export function GroupMessageBubble({
               className={clsx(
                 'rounded-2xl overflow-hidden',
                 isOwn
-                  ? 'bg-primary-600 text-white rounded-br-md'
+                  ? 'bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-br-md shadow-sm'
                   : isMentioned
-                    ? 'bg-amber-100 dark:bg-amber-900/30 text-slate-900 dark:text-white rounded-bl-md border-l-4 border-amber-400 dark:border-amber-500'
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white rounded-bl-md',
+                    ? 'bg-amber-50 dark:bg-amber-900/30 text-slate-900 dark:text-white rounded-bl-md border-l-4 border-amber-400 dark:border-amber-500 shadow-sm'
+                    : 'bg-white dark:bg-slate-700/80 text-slate-900 dark:text-white rounded-bl-md shadow-sm border border-slate-100 dark:border-slate-600',
                 // Only add padding if there's text content
                 hasAttachment && !hasText ? 'p-1' : 'px-4 py-2'
               )}

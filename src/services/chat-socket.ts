@@ -50,10 +50,12 @@ export const connectChatSocket = (): Promise<Socket> => {
     };
 
     const onConnectError = (error: Error) => {
-      console.error('Chat socket connection error:', error.message);
+      console.warn('Chat socket connection error (will auto-reconnect):', error.message);
       connectionPromise = null;
       notifyListeners(false);
-      reject(error);
+      // Don't reject — socket.io auto-reconnection is enabled and will keep retrying.
+      // Rejecting here causes unhandled promise rejections that crash Next.js.
+      resolve(chatSocket!);
     };
 
     chatSocket.once('connect', onConnect);

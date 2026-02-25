@@ -27,6 +27,8 @@ export {
   subscribeToTyping,
   subscribeToUserOnline,
   subscribeToUserOffline,
+  subscribeToCustomerOnline,
+  subscribeToCustomerOffline,
   subscribeToMessageDeleted,
   sendChatMessage,
   sendTypingIndicator,

@@ -26,6 +26,8 @@ import type {
   GroupMessageInfo,
   MessageSender,
   ConversationInfo,
+  UnifiedSupportQueueResponse,
+  CustomerHistoryResponse,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -165,6 +167,7 @@ export function clearChatToken(): void {
 const chatApiInstance = axios.create({
   baseURL: CHAT_API_BASE_URL,
   withCredentials: true,
+  timeout: 15000, // 15s — prevents hanging if FastAPI microservice is unresponsive
   headers: {
     "Content-Type": "application/json",
   },
@@ -458,6 +461,37 @@ export const activeSessionsApi = {
   revokeSpecificSessionForCompany: (companyId: number, sessionId: number) =>
     api.post<ApiResponse<RevokeSpecificSessionResponse>>(
       `/notifications/admin/company/${companyId}/revoke-session/${sessionId}`,
+    ),
+};
+
+// Support queue endpoints — unified customer support via internal chat
+export const supportQueueApi = {
+  // List support queue items (conversations with isSupportChat=true)
+  getQueue: (
+    status: "waiting" | "active" | "resolved" = "waiting",
+    page = 1,
+    limit = 20,
+  ) =>
+    chatApiInstance.get<ApiResponse<UnifiedSupportQueueResponse>>(
+      `/chat/support-queue?status=${status}&page=${page}&limit=${limit}`,
+    ),
+
+  // Agent accepts a waiting customer
+  acceptConversation: (conversationId: string) =>
+    chatApiInstance.post<ApiResponse<ChatConversation>>(
+      `/chat/support-queue/${conversationId}/accept`,
+    ),
+
+  // Agent resolves an active support conversation
+  resolveConversation: (conversationId: string) =>
+    chatApiInstance.post<ApiResponse<ChatConversation>>(
+      `/chat/support-queue/${conversationId}/resolve`,
+    ),
+
+  // Get customer's conversation history (agent-facing)
+  getCustomerHistory: (customerId: number, page = 1, limit = 10) =>
+    chatApiInstance.get<ApiResponse<CustomerHistoryResponse>>(
+      `/chat/support-queue/customer/${customerId}/conversations?page=${page}&limit=${limit}`,
     ),
 };
 

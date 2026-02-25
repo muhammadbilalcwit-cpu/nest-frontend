@@ -62,8 +62,10 @@ export function ConversationItem({
       <button
         onClick={onClick}
         className={clsx(
-          'w-full px-4 py-3 flex items-start gap-3 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left',
-          isUnread && 'bg-primary-50 dark:bg-primary-900/20'
+          'w-full px-4 py-3 flex items-start gap-3 transition-all text-left border-l-2',
+          isUnread
+            ? 'bg-primary-50/60 dark:bg-primary-900/15 border-l-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/25'
+            : 'border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/60'
         )}
       >
         {/* Avatar */}
@@ -97,7 +99,7 @@ export function ConversationItem({
           </div>
           <div className="flex items-center justify-between mt-0.5">
             {isTyping ? (
-              <p className="text-sm truncate text-green-500 dark:text-green-400 italic">
+              <p className="text-sm truncate text-primary-500 dark:text-primary-400 italic font-medium">
                 typing...
               </p>
             ) : (

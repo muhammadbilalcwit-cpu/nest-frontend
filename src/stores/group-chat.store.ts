@@ -283,6 +283,9 @@ export const useGroupChatStore = create<GroupChatStore>((set, get) => ({
 
   // Select a group and load messages
   selectGroup: async (group: GroupConversation) => {
+    // Clear any active 1:1 conversation to prevent split-panel conflicts
+    const { useChatStore } = await import('./chat.store');
+    useChatStore.setState({ activeConversation: null });
     set({ activeGroup: group, messages: [], messageSenders: {}, isLoading: true });
     await get().fetchGroupMessages(group._id);
 

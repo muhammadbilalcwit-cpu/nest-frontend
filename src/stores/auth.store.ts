@@ -67,7 +67,7 @@ function getUserRoles(user: User | null): string[] {
 // Determines the user's primary (highest priority) role
 function getPrimaryRole(user: User | null): RoleSlug | null {
   if (!user) return null;
-  const priority: RoleSlug[] = ['super_admin', 'company_admin', 'manager', 'user'];
+  const priority: RoleSlug[] = ['super_admin', 'company_admin', 'manager', 'user', 'customer'];
   const userRoles = getUserRoles(user);
   for (const role of priority) {
     if (userRoles.includes(role)) return role;
@@ -94,7 +94,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isLoading: false,
       });
       connectSocket();
-      connectChatSocket();
+      connectChatSocket().catch(() => {
+        // Chat microservice (FastAPI) may be unavailable — socket will auto-reconnect
+      });
 
       // Check compliance policy in background (non-blocking)
       chatApi.getComplianceScopedUsers()
@@ -116,7 +118,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       if (token) setChatToken(token);
 
       await get().fetchUser();
-      set({ redirectTo: '/dashboard' });
+      // Customers go directly to messages (their only accessible page)
+      const role = get().primaryRole;
+      set({ redirectTo: role === 'customer' ? '/dashboard/messages' : '/dashboard' });
     } catch (error) {
       set({ isLoading: false });
       throw error;

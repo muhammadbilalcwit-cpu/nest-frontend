@@ -70,7 +70,7 @@ export function Avatar({ src, name, size = 'md', isOnline, fallbackIcon, classNa
         </div>
       )}
 
-      {isOnline !== undefined && isOnline && (
+      {isOnline !== undefined && !!isOnline && (
         <span
           className={clsx(
             classes.indicator,

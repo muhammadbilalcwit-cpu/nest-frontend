@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
+import type { RoleSlug } from '@/types';
 import {
   Building2,
   LayoutDashboard,
@@ -81,6 +82,13 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       icon: <ScrollText className="w-5 h-5" />,
       roles: ['super_admin', 'company_admin'],
     },
+    // Support page hidden — replaced by Support tab in Messages sidebar
+    // {
+    //   href: '/dashboard/support',
+    //   label: 'Support',
+    //   icon: <Headset className="w-5 h-5" />,
+    //   roles: ['super_admin', 'company_admin', 'manager', 'user']
+    // },
     {
       href: '/dashboard/compliance',
       label: 'Compliance',
@@ -95,10 +103,14 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
     },
   ];
 
+  const isCustomer = primaryRole === 'customer';
+
   const filteredNavItems = navItems.filter((item) => {
     if (item.visible === false) return false;
+    // Customers only see Settings (chat is accessed via the Messages sidebar)
+    if (isCustomer) return item.href === '/dashboard/settings';
     if (!item.roles) return true;
-    return item.roles.some((role) => hasRole(role as 'super_admin' | 'company_admin' | 'manager' | 'user'));
+    return item.roles.some((role) => hasRole(role as RoleSlug));
   });
 
   const isActive = (href: string) => {

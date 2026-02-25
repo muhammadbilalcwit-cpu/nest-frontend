@@ -9,7 +9,7 @@ import type {
   MessageAttachment,
   MessageMention,
 } from '@/types';
-import { chatApi } from '@/services/api';
+import { chatApi, supportQueueApi } from '@/services/api';
 import { isChatConnected as isConnected } from '@/services/chat-socket';
 import { useAuthStore } from './auth.store';
 
@@ -24,6 +24,11 @@ import {
   subscribeToMessageDeleted,
   subscribeToStatusUpdate,
   subscribeToMessageConfirmed,
+  subscribeToSupportQueueNew,
+  subscribeToSupportQueueUpdated,
+  subscribeToCustomerOnline,
+  subscribeToCustomerOffline,
+  subscribeToOnlineList,
 } from '@/services/socket-events/chat.events';
 
 // Store unsubscribe functions to prevent memory leaks
@@ -66,6 +71,8 @@ interface ChatStore {
   unreadCount: number;
   typingUsers: Set<number>;
   onlineUsers: Set<number>;
+  supportWaitingCount: number;
+  supportUnreadCount: number;
 
   // Actions
   openChat: () => void;
@@ -94,9 +101,12 @@ interface ChatStore {
   handleTyping: (senderId: number, isTyping: boolean) => void;
   handleUserOnline: (userId: number) => void;
   handleUserOffline: (userId: number) => void;
+  handleCustomerOnline: (customerId: number) => void;
+  handleCustomerOffline: (customerId: number) => void;
   handleMessageDeleted: (messageId: string, conversationId: string) => void;
   handleStatusUpdate: (data: ChatStatusUpdatePayload) => void;
   handleMessageConfirmed: (data: MessageConfirmedPayload) => void;
+  setSupportWaitingCount: (count: number) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -113,6 +123,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   unreadCount: 0,
   typingUsers: new Set(),
   onlineUsers: new Set(),
+  supportWaitingCount: 0,
+  supportUnreadCount: 0,
 
   // UI Actions
   openChat: () => set({ isOpen: true, windowMode: 'sidebar' }),
@@ -121,16 +133,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setWindowMode: (mode) => set({ windowMode: mode }),
 
   // Fetch chat config independently (called on auth, before initializeChat)
+  // Retries up to 3 times with 2s delay if the FastAPI microservice is temporarily unavailable
   fetchChatConfig: async () => {
-    try {
-      const res = await chatApi.getChatConfig();
-      if (res.data?.data) {
-        set({ chatConfig: res.data.data });
-      } else {
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await chatApi.getChatConfig();
+        if (res.data?.data) {
+          set({ chatConfig: res.data.data });
+          return;
+        }
         console.warn('[Chat] Config response missing data:', res.data);
+        return;
+      } catch (err) {
+        console.error(`[Chat] Failed to fetch config (attempt ${attempt}/${maxRetries}):`, err);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 2000));
+        }
       }
-    } catch (err) {
-      console.error('[Chat] Failed to fetch config:', err);
     }
   },
 
@@ -183,6 +203,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
     );
 
+    // Authoritative online list from server — replaces stale API data
+    unsubscribeFunctions.push(
+      subscribeToOnlineList((data) => {
+        const serverOnlineIds = new Set(data.userIds);
+        set((state) => ({
+          onlineUsers: serverOnlineIds,
+          chatableUsers: state.chatableUsers.map((u) => ({
+            ...u,
+            isOnline: serverOnlineIds.has(u.id),
+          })),
+        }));
+      })
+    );
+
+    // Customer online/offline — update customerInfo in support conversations
+    unsubscribeFunctions.push(
+      subscribeToCustomerOnline((data) => {
+        get().handleCustomerOnline(data.customerId);
+      })
+    );
+    unsubscribeFunctions.push(
+      subscribeToCustomerOffline((data) => {
+        get().handleCustomerOffline(data.customerId);
+      })
+    );
+
     unsubscribeFunctions.push(
       subscribeToMessageDeleted((data) => {
         get().handleMessageDeleted(data.messageId, data.conversationId);
@@ -201,11 +247,44 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
     );
 
+    // Support queue events — dispatch window events for SupportQueueList + update badge
+    unsubscribeFunctions.push(
+      subscribeToSupportQueueNew((data: any) => {
+        console.log('[SUPPORT-SOCKET] Received support:queue:new', data);
+        set((state) => ({ supportWaitingCount: state.supportWaitingCount + 1 }));
+        window.dispatchEvent(new CustomEvent('support:queue:new'));
+      })
+    );
+    unsubscribeFunctions.push(
+      subscribeToSupportQueueUpdated((data: any) => {
+        console.log('[SUPPORT-SOCKET] Received support:queue:updated', data);
+        // Adjust waiting count based on status change
+        if (data?.status === 'active') {
+          // Conversation accepted — one fewer waiting
+          set((state) => ({ supportWaitingCount: Math.max(0, state.supportWaitingCount - 1) }));
+        } else if (data?.status === 'waiting') {
+          // Conversation reverted to waiting (e.g. agent disconnected)
+          set((state) => ({ supportWaitingCount: state.supportWaitingCount + 1 }));
+        }
+        window.dispatchEvent(new CustomEvent('support:queue:updated'));
+      })
+    );
+
     // Fetch initial data (config already fetched by fetchChatConfig)
     await Promise.all([
       get().fetchChatableUsers(),
       get().fetchConversations(),
       get().fetchUnreadCount(),
+      // Fetch support waiting count so Support tab badge is accurate on load
+      supportQueueApi.getQueue('waiting', 1, 1)
+        .then((res) => {
+          const counts = res.data?.data?.statusCounts;
+          console.log('[SUPPORT-INIT] Fetched queue counts:', { raw: res.data, counts });
+          if (counts) set({ supportWaitingCount: counts.waiting });
+        })
+        .catch((err) => {
+          console.error('[SUPPORT-INIT] Failed to fetch queue counts:', err?.response?.status, err?.message);
+        }),
     ]);
   },
 
@@ -231,6 +310,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       unreadCount: 0,
       typingUsers: new Set(),
       onlineUsers: new Set(),
+      supportWaitingCount: 0,
+      supportUnreadCount: 0,
     });
   },
 
@@ -255,11 +336,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  // Fetch all conversations
+  // Fetch all conversations (internal chats only — support chats are in Support tab)
   fetchConversations: async () => {
     try {
       const response = await chatApi.getConversations();
-      const conversations = response.data.data;
+      // Filter out support chats client-side (safety net for backend filter)
+      const conversations = response.data.data.filter(
+        (c) => !(c as any).isSupportChat
+      );
 
       // Merge conversation partners' online status into the set
       // (catches users like super_admin who may not be in chatableUsers)
@@ -296,7 +380,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   fetchUnreadCount: async () => {
     try {
       const response = await chatApi.getUnreadCount();
-      set({ unreadCount: response.data.data.direct });
+      set({
+        unreadCount: response.data.data.direct,
+        supportUnreadCount: response.data.data.support || 0,
+      });
     } catch (error) {
       console.error('Failed to fetch unread count:', error);
     }
@@ -304,21 +391,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   // Select a conversation and load its messages
   selectConversation: async (conversation: ChatConversation) => {
+    // Clear any active group to prevent split-panel conflicts
+    const { useGroupChatStore } = await import('./group-chat.store');
+    useGroupChatStore.getState().clearActiveGroup();
     set({ activeConversation: conversation, messages: [], isLoading: true });
     await get().fetchMessages(conversation._id);
 
     // Mark messages as read
     markMessagesAsRead(conversation._id);
 
-    // Update unread count in conversations list
-    set((state) => ({
-      conversations: state.conversations.map((c) =>
-        c._id === conversation._id ? { ...c, unreadCount: 0 } : c
-      ),
-    }));
-
-    // Recalculate total unread count
-    await get().fetchUnreadCount();
+    // Decrement global unread count by this conversation's unreads & reset per-conversation count
+    const currentConv = get().conversations.find((c) => c._id === conversation._id);
+    const prevUnread = currentConv?.unreadCount || 0;
+    if ((conversation as any).isSupportChat) {
+      // For support chats, decrement support unread count by conversation's unread
+      const convUnread = (conversation as any).unreadCount || 0;
+      set((state) => ({
+        supportUnreadCount: Math.max(0, state.supportUnreadCount - convUnread),
+      }));
+    } else {
+      set((state) => ({
+        conversations: state.conversations.map((c) =>
+          c._id === conversation._id ? { ...c, unreadCount: 0 } : c
+        ),
+        unreadCount: Math.max(0, state.unreadCount - prevUnread),
+      }));
+    }
   },
 
   // Start a new conversation with a user
@@ -413,6 +511,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       updatedAt: new Date().toISOString(),
       attachment: attachment || null,
       mentions: mentions || undefined,
+      // Mark sender role for support chats (agent sending = not a customer)
+      ...(activeConversation.isSupportChat && { senderIsCustomer: false }),
     };
 
     // Add optimistic message immediately (instant UI feedback)
@@ -451,6 +551,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       tempId,
       recipientId,
       content,
+      conversationId: activeConversation._id,
       attachment,
       mentions,
     });
@@ -474,6 +575,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     sendTypingIndicator({
       recipientId: activeConversation.otherUser.id,
       isTyping,
+      ...(activeConversation.isSupportChat && { isSupportChat: true }),
     });
   },
 
@@ -508,7 +610,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const { message, conversation } = data;
     const { activeConversation, chatableUsers } = get();
     const currentUser = useAuthStore.getState().user;
-    const isOwnMessage = message.senderId === currentUser?.id;
+    // For support chats, use senderIsCustomer role flag to determine ownership
+    // (avoids customer.id / user.id collision when both are the same value)
+    const isSupportMsg = message.senderIsCustomer != null;
+    const isOwnMessage = isSupportMsg
+      ? !message.senderIsCustomer  // Agent's own messages have senderIsCustomer=false
+      : message.senderId === currentUser?.id;
 
     // Prevent duplicate messages using global tracking
     if (processedMessageIds.has(message._id)) {
@@ -538,6 +645,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       lastMessagePreview = message.content || attachmentLabels[message.attachment.type] || '📎 Attachment';
     }
 
+    // Check if this is a support chat message (backend includes isSupportChat in socket payload)
+    const isSupportChat = !!(conversation as any).isSupportChat || !!(conversation as any).supportMetadata;
+
     // If this is the active conversation, add message to list
     if (activeConversation?._id === conversation._id) {
       set((state) => ({
@@ -547,9 +657,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Mark as read immediately
       markMessagesAsRead(conversation._id);
     } else if (!isOwnMessage) {
-      // Only increment unread count for OTHER people's messages
-      // (own messages from another session should not trigger unread)
-      set((state) => ({ unreadCount: state.unreadCount + 1 }));
+      if (isSupportChat) {
+        // Increment support unread count
+        set((state) => ({ supportUnreadCount: state.supportUnreadCount + 1 }));
+      } else {
+        // Increment direct chat unread count
+        set((state) => ({ unreadCount: state.unreadCount + 1 }));
+      }
+    }
+
+    // Support chat messages should NOT appear in the Chats tab conversations list
+    // but we need to refresh the support queue so lastMessage preview updates
+    if (isSupportChat) {
+      window.dispatchEvent(new CustomEvent('support:queue:updated'));
+      return;
     }
 
     // Update or add conversation to list
@@ -636,6 +757,44 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
+  // Handle customer coming online (for support panel)
+  handleCustomerOnline: (customerId: number) => {
+    set((state) => {
+      // Update active conversation's customerInfo if it matches
+      const updated: Partial<typeof state> = {};
+      if (
+        state.activeConversation?.isSupportChat &&
+        state.activeConversation?.customerInfo?.customerId === customerId
+      ) {
+        updated.activeConversation = {
+          ...state.activeConversation,
+          customerInfo: { ...state.activeConversation.customerInfo, isOnline: true },
+        };
+      }
+      return updated;
+    });
+    // Notify SupportQueueList to update item
+    window.dispatchEvent(new CustomEvent('customer:online', { detail: { customerId } }));
+  },
+
+  // Handle customer going offline (for support panel)
+  handleCustomerOffline: (customerId: number) => {
+    set((state) => {
+      const updated: Partial<typeof state> = {};
+      if (
+        state.activeConversation?.isSupportChat &&
+        state.activeConversation?.customerInfo?.customerId === customerId
+      ) {
+        updated.activeConversation = {
+          ...state.activeConversation,
+          customerInfo: { ...state.activeConversation.customerInfo, isOnline: false },
+        };
+      }
+      return updated;
+    });
+    window.dispatchEvent(new CustomEvent('customer:offline', { detail: { customerId } }));
+  },
+
   // Handle message deleted event (from WebSocket when someone deletes for everyone)
   handleMessageDeleted: (messageId: string, conversationId: string) => {
     const { activeConversation } = get();
@@ -683,4 +842,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       processedMessageIds.add(data.messageId);
     }
   },
+
+  setSupportWaitingCount: (count: number) => set({ supportWaitingCount: count }),
 }));

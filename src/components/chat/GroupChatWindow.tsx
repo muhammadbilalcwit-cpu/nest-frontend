@@ -54,7 +54,6 @@ export function GroupChatWindow() {
   const [isRecording, setIsRecording] = useState(false);
   const [hasPendingVoiceNote, setHasPendingVoiceNote] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MentionInputRef>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -217,6 +216,13 @@ export function GroupChatWindow() {
     }
     prevMessagesLengthRef.current = messages.length;
   }, [messages.length, scrollToBottom]);
+
+  // Auto-scroll when typing indicator appears
+  useEffect(() => {
+    if (groupTypingUsers.size > 0 && isAtBottomRef.current) {
+      scrollToBottom();
+    }
+  }, [groupTypingUsers, scrollToBottom]);
 
   // Auto-scroll when images/media finish loading — re-registers when
   // isLoading changes so the listener is set up after container appears
@@ -406,12 +412,12 @@ export function GroupChatWindow() {
     <div className="h-full flex flex-col">
       {/* Messages area */}
       <div className="relative flex-1">
-        <div ref={messagesContainerRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4 space-y-4">
+        <div ref={messagesContainerRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4 space-y-4 chat-bg-pattern">
           {groupedMessages.map((group) => (
             <div key={group.date}>
               {/* Date separator */}
               <div className="flex items-center justify-center my-4">
-                <span className="px-3 py-1 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-700 rounded-full">
+                <span className="px-3 py-1 text-[11px] font-medium text-slate-500 dark:text-dark-muted bg-white/80 dark:bg-slate-800/80 rounded-full shadow-sm border border-slate-100 dark:border-slate-700">
                   {formatDateLabel(group.date)}
                 </span>
               </div>
@@ -426,7 +432,7 @@ export function GroupChatWindow() {
                         key={message._id}
                         className="flex justify-center my-2"
                       >
-                        <span className="px-3 py-1.5 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-700/50 rounded-lg shadow-sm">
+                        <span className="px-3 py-1.5 text-xs text-slate-500 dark:text-dark-muted bg-white/80 dark:bg-slate-800/80 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
                           {getSystemMessageText(message)}
                         </span>
                       </div>
@@ -455,7 +461,6 @@ export function GroupChatWindow() {
             </div>
           ))}
 
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Jump to bottom button (WhatsApp style) */}
@@ -472,31 +477,33 @@ export function GroupChatWindow() {
         )}
       </div>
 
-      {/* Typing indicator */}
+      {/* Typing indicator — fixed above input */}
       {groupTypingUsers.size > 0 && (
-        <div className="px-4 py-1.5 text-xs mb-1 border-slate-100 dark:border-dark-border flex items-center gap-1.5">
-          <div className="flex gap-0.5">
-            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-            <span
-              className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
-              style={{ animationDelay: '0.1s' }}
-            />
-            <span
-              className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
-              style={{ animationDelay: '0.2s' }}
-            />
+        <div className="chat-bg-pattern px-4 py-1.5">
+          <div className="inline-flex items-center gap-1.5">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
+              <span
+                className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+                style={{ animationDelay: '0.15s' }}
+              />
+              <span
+                className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+                style={{ animationDelay: '0.3s' }}
+              />
+            </div>
+            <span className="text-xs text-slate-500 dark:text-dark-muted">
+              {groupTypingUsers.size === 1
+                ? `${getSenderName(Array.from(groupTypingUsers as Set<number>)[0])} is typing...`
+                : `${groupTypingUsers.size} people are typing...`}
+            </span>
           </div>
-          <span className="text-slate-500 dark:text-dark-muted">
-            {groupTypingUsers.size === 1
-              ? `${getSenderName(Array.from(groupTypingUsers as Set<number>)[0])} is typing...`
-              : `${groupTypingUsers.size} people are typing...`}
-          </span>
         </div>
       )}
 
       {/* Attachment preview */}
       {pendingAttachment && (
-        <div className="px-4 py-2 border-t border-slate-200 dark:border-dark-border">
+        <div className="px-4 py-2 bg-white dark:bg-dark-card border-b border-slate-100 dark:border-dark-border">
           <AttachmentPreview
             attachment={pendingAttachment}
             onRemove={() => setPendingAttachment(null)}
@@ -505,7 +512,7 @@ export function GroupChatWindow() {
       )}
 
       {/* Input area */}
-      <div className="p-4 border-t border-slate-200 dark:border-dark-border">
+      <div className="p-3 bg-white dark:bg-dark-card shadow-[0_-1px_4px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_4px_rgba(0,0,0,0.2)]">
         <div className="flex items-center gap-2">
           {/* Hide attachment button and input when recording or has pending voice note */}
           {!isRecording && !hasPendingVoiceNote && (
@@ -553,7 +560,7 @@ export function GroupChatWindow() {
               onClick={handleSend}
               disabled={isSending}
               icon={<Send className="w-5 h-5" />}
-              className="!p-2 !rounded-full"
+              className="!p-2.5 !rounded-full"
             />
           )}
         </div>

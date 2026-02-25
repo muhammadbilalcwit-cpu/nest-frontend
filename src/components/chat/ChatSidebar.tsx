@@ -1,22 +1,29 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { MessageCircle, ArrowLeft, Users, Minus, X, Maximize2, PanelRight } from 'lucide-react';
+import { MessageCircle, Users, Minus, X, Maximize2, PanelRight } from 'lucide-react';
 import clsx from 'clsx';
 import { useChatStore } from '@/stores/chat.store';
 import { useGroupChatStore } from '@/stores/group-chat.store';
 import { useAuthStore } from '@/stores/auth.store';
 import { IconActionButton, Badge, Avatar } from '@/components/ui';
-import { ChatTabs } from './ChatTabs';
+import { ChatTabs, type TabType } from './ChatTabs';
 import { ChatWindow } from './ChatWindow';
 import { GroupChatWindow } from './GroupChatWindow';
 import { GroupInfoModal } from './GroupInfoModal';
+import { SupportCustomerPanel } from './SupportCustomerPanel';
 
-type ChatView = 'list' | 'chat' | 'group';
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
 
 const MIN_WIDTH = 320;
 const MIN_HEIGHT = 400;
+
+// Adaptive layout widths
+const LIST_ONLY_WIDTH = 400;
+const LIST_PANEL_WIDTH = 320;
+const SUPPORT_PANEL_WIDTH = 270;
+const SPLIT_WIDTH = 1020; // list + chat
+const SUPPORT_WIDTH = 1020; // list + chat + customer info
 
 export function ChatSidebar() {
   const [showGroupInfo, setShowGroupInfo] = useState(false);
@@ -59,12 +66,15 @@ export function ChatSidebar() {
   const chatAccessRoles = useChatStore((s) => s.chatConfig.chatAccessRoles);
   const canAccessChat = chatAccessRoles.length > 0 && hasRole(chatAccessRoles as import('@/types').RoleSlug[]);
 
-  // Determine current view based on active conversation or group
-  const currentView: ChatView = activeGroup
-    ? 'group'
-    : activeConversation
-      ? 'chat'
-      : 'list';
+  // Layout state
+  const hasActiveChat = !!activeConversation || !!activeGroup;
+  const isSupportChat = activeConversation?.isSupportChat === true;
+
+  const panelWidth = !hasActiveChat
+    ? LIST_ONLY_WIDTH
+    : isSupportChat
+      ? SUPPORT_WIDTH
+      : SPLIT_WIDTH;
 
   // Fetch chat config as soon as authenticated (independent of canAccessChat)
   useEffect(() => {
@@ -105,7 +115,6 @@ export function ChatSidebar() {
       windowRef.current.style.top = '';
       windowRef.current.style.right = '';
       windowRef.current.style.bottom = '';
-      windowRef.current.style.width = '';
       windowRef.current.style.height = '';
     }
   }, [isOpen, windowMode]);
@@ -247,12 +256,31 @@ export function ChatSidebar() {
     };
   }, [handleDragMove, handleDragUp, handleResizeMove, handleResizeUp]);
 
+  // Clear conversation/group when switching to a tab that doesn't match
+  const handleTabChange = useCallback((tab: TabType) => {
+    const conv = useChatStore.getState().activeConversation;
+    const group = useGroupChatStore.getState().activeGroup;
+
+    if (tab === 'conversations') {
+      if (conv?.isSupportChat) useChatStore.setState({ activeConversation: null, messages: [] });
+      if (group) clearActiveGroup();
+    } else if (tab === 'groups') {
+      if (conv) useChatStore.setState({ activeConversation: null, messages: [] });
+    } else if (tab === 'support') {
+      if (conv && !conv.isSupportChat) useChatStore.setState({ activeConversation: null, messages: [] });
+      if (group) clearActiveGroup();
+    } else {
+      if (conv) useChatStore.setState({ activeConversation: null, messages: [] });
+      if (group) clearActiveGroup();
+    }
+  }, [clearActiveGroup]);
+
   if (!canAccessChat) {
     return null;
   }
 
-  // Handle back button click
-  const handleBack = () => {
+  // Close the right chat panel (deselect conversation/group)
+  const handleCloseChat = () => {
     if (activeGroup) {
       clearActiveGroup();
     } else if (activeConversation) {
@@ -269,16 +297,11 @@ export function ChatSidebar() {
     ? `${otherUser.firstname || ''} ${otherUser.lastname || ''}`.trim() || otherUser.email
     : '';
 
-  // Render header left content based on view
-  const renderHeaderLeft = () => {
+  // Render chat sub-header content (right panel header)
+  const renderChatSubHeader = () => {
     if (activeGroup) {
       return (
         <>
-          <IconActionButton
-            icon={<ArrowLeft className="w-5 h-5" />}
-            onClick={handleBack}
-            className="!p-1.5"
-          />
           {activeGroup.groupAvatar ? (
             <Avatar
               src={activeGroup.groupAvatar}
@@ -306,37 +329,32 @@ export function ChatSidebar() {
     }
 
     if (otherUser) {
+      // For support chats, use customerInfo.isOnline (customers aren't tracked in onlineUsers)
+      const isUserOnline = isSupportChat
+        ? activeConversation?.customerInfo?.isOnline ?? false
+        : onlineUsers.has(otherUser.id);
+
       return (
         <>
-          <IconActionButton
-            icon={<ArrowLeft className="w-5 h-5" />}
-            onClick={handleBack}
-            className="!p-1.5"
-          />
           <Avatar
             src={otherUser.profilePicture}
             name={displayName}
             size="sm"
-            isOnline={onlineUsers.has(otherUser.id)}
+            isOnline={isUserOnline}
           />
-          <span className="font-semibold text-slate-900 dark:text-white truncate">
-            {displayName}
-          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="font-semibold text-slate-900 dark:text-white text-sm truncate">
+              {displayName}
+            </span>
+            <span className="text-xs text-slate-500 dark:text-dark-muted">
+              {isUserOnline ? 'Online' : 'Offline'}
+            </span>
+          </div>
         </>
       );
     }
 
-    return (
-      <>
-        <MessageCircle className="w-5 h-5 text-primary-600 flex-shrink-0" />
-        <span className="font-semibold text-slate-900 dark:text-white">
-          Messages
-        </span>
-        {totalUnreadCount > 0 && (
-          <Badge label={String(totalUnreadCount)} variant="primary" />
-        )}
-      </>
-    );
+    return null;
   };
 
   const isSidebar = windowMode === 'sidebar';
@@ -353,23 +371,27 @@ export function ChatSidebar() {
           'shadow-2xl',
           isSidebar
             ? [
-                // Sidebar mode — full height right panel
-                'right-0 top-0 h-full w-96',
+                // Sidebar mode — full height right panel with adaptive width
+                'right-0 top-0 h-full',
                 'border-l border-t-0 border-b-0 border-r-0',
-                'transition-transform duration-300 ease-out',
+                'transition-[width,transform] duration-300 ease-out',
                 isOpen ? 'translate-x-0' : 'translate-x-full',
               ]
             : [
                 // Floating mode — draggable window
                 'rounded-2xl',
-                'w-96 h-[550px]',
+                'h-[600px]',
                 'bottom-6 right-6',
-                'transition-all duration-200 ease-out',
+                'transition-[width,transform,opacity] duration-200 ease-out',
                 isOpen
                   ? 'scale-100 opacity-100 pointer-events-auto'
                   : 'scale-95 opacity-0 pointer-events-none',
               ]
         )}
+        style={{
+          width: panelWidth,
+          maxWidth: isSidebar ? 'calc(100vw - 80px)' : 'calc(100vw - 48px)',
+        }}
       >
         {/* Resize handles — floating mode only */}
         {isOpen && !isSidebar && (
@@ -388,13 +410,19 @@ export function ChatSidebar() {
         {/* Header — draggable in floating mode */}
         <div
           className={clsx(
-            'h-14 flex items-center justify-between px-3 border-b border-slate-200 dark:border-dark-border flex-shrink-0 select-none',
+            'h-14 flex items-center justify-between px-4 border-b border-slate-200 dark:border-dark-border flex-shrink-0 select-none',
             !isSidebar && 'cursor-grab active:cursor-grabbing'
           )}
           onMouseDown={isSidebar ? undefined : handleHeaderMouseDown}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {renderHeaderLeft()}
+            <MessageCircle className="w-5 h-5 text-primary-600 flex-shrink-0" />
+            <span className="font-semibold text-slate-900 dark:text-white">
+              Messages
+            </span>
+            {totalUnreadCount > 0 && (
+              <Badge label={String(totalUnreadCount)} variant="primary" />
+            )}
           </div>
 
           {/* Window controls */}
@@ -423,15 +451,54 @@ export function ChatSidebar() {
           </div>
         </div>
 
-        {/* Content */}
-        <div className={clsx('flex-1 overflow-hidden', !isSidebar && 'rounded-b-2xl')}>
-          {currentView === 'group' ? (
-            <GroupChatWindow />
-          ) : currentView === 'chat' ? (
-            <ChatWindow />
-          ) : (
+        {/* Body — split layout */}
+        <div className={clsx('flex-1 flex overflow-hidden', !isSidebar && 'rounded-b-2xl')}>
+          {/* Left: Contact list panel */}
+          <div
+            className={clsx(
+              'flex-shrink-0 flex flex-col overflow-hidden transition-[width] duration-300 ease-out',
+              hasActiveChat && 'border-r border-slate-200 dark:border-dark-border'
+            )}
+            style={{ width: hasActiveChat ? LIST_PANEL_WIDTH : '100%' }}
+          >
             <div className="h-full flex flex-col">
-              <ChatTabs />
+              <ChatTabs onTabChange={handleTabChange} />
+            </div>
+          </div>
+
+          {/* Middle: Chat panel */}
+          {hasActiveChat && (
+            <div className="flex-1 flex flex-col min-w-0">
+              {/* Chat sub-header */}
+              <div className="h-14 flex items-center justify-between px-4 border-b border-slate-200 dark:border-dark-border flex-shrink-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {renderChatSubHeader()}
+                </div>
+                <IconActionButton
+                  icon={<X className="w-4 h-4" />}
+                  onClick={handleCloseChat}
+                  className="!p-1"
+                  title="Close chat"
+                />
+              </div>
+
+              {/* Chat content */}
+              <div className="flex-1 overflow-hidden">
+                {activeGroup ? <GroupChatWindow /> : <ChatWindow />}
+              </div>
+            </div>
+          )}
+
+          {/* Right: Customer info panel (support chats only) */}
+          {isSupportChat && activeConversation?.customerInfo && (
+            <div
+              className="flex-shrink-0 border-l border-slate-200 dark:border-dark-border overflow-y-auto"
+              style={{ width: SUPPORT_PANEL_WIDTH }}
+            >
+              <SupportCustomerPanel
+                customerInfo={activeConversation.customerInfo}
+                conversationId={activeConversation._id}
+              />
             </div>
           )}
         </div>

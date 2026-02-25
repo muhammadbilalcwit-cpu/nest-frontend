@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
-import { Send, ChevronDown } from 'lucide-react';
+import { Send, ChevronDown, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, isToday, isYesterday } from 'date-fns';
 import { useChatStore } from '@/stores/chat.store';
@@ -52,7 +52,6 @@ export function ChatWindow() {
   const [isRecording, setIsRecording] = useState(false);
   const [hasPendingVoiceNote, setHasPendingVoiceNote] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MentionInputRef>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -163,6 +162,13 @@ export function ChatWindow() {
     }
     prevMessagesLengthRef.current = messages.length;
   }, [messages.length, scrollToBottom]);
+
+  // Auto-scroll when typing indicator appears
+  useEffect(() => {
+    if (isOtherUserTyping && isAtBottomRef.current) {
+      scrollToBottom();
+    }
+  }, [isOtherUserTyping, scrollToBottom]);
 
   // Auto-scroll when images/media finish loading — re-registers when
   // isLoading changes so the listener is set up after container appears
@@ -285,12 +291,12 @@ export function ChatWindow() {
     <div className="h-full flex flex-col">
       {/* Messages area */}
       <div className="relative flex-1">
-        <div ref={messagesContainerRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4 space-y-4">
+        <div ref={messagesContainerRef} className="absolute inset-0 overflow-y-auto overflow-x-hidden p-4 space-y-4 chat-bg-pattern">
           {groupedMessages.map((group) => (
             <div key={group.date}>
               {/* Date separator */}
               <div className="flex items-center justify-center my-4">
-                <span className="px-3 py-1 text-xs text-slate-500 dark:text-dark-muted bg-slate-100 dark:bg-slate-700 rounded-full">
+                <span className="px-3 py-1 text-[11px] font-medium text-slate-500 dark:text-dark-muted bg-white/80 dark:bg-slate-800/80 rounded-full shadow-sm border border-slate-100 dark:border-slate-700">
                   {formatDateLabel(group.date)}
                 </span>
               </div>
@@ -301,14 +307,17 @@ export function ChatWindow() {
                   <MessageBubble
                     key={message._id}
                     message={message}
-                    isOwn={message.senderId === user?.id}
+                    isOwn={
+                      activeConversation?.isSupportChat && message.senderIsCustomer != null
+                        ? !message.senderIsCustomer
+                        : message.senderId === user?.id
+                    }
                   />
                 ))}
               </div>
             </div>
           ))}
 
-          <div ref={messagesEndRef} />
         </div>
 
         {/* Jump to bottom button (WhatsApp style) */}
@@ -325,86 +334,105 @@ export function ChatWindow() {
         )}
       </div>
 
-      {/* Typing indicator */}
+      {/* Typing indicator — fixed above input */}
       {isOtherUserTyping && (
-        <div className="px-4 py-1.5 text-xs mb-1 border-slate-100 dark:border-dark-border flex items-center gap-1.5">
-          <div className="flex gap-0.5">
-            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
-            <span
-              className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
-              style={{ animationDelay: '0.1s' }}
-            />
-            <span
-              className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
-              style={{ animationDelay: '0.2s' }}
-            />
+        <div className="chat-bg-pattern px-4 py-1.5">
+          <div className="inline-flex items-center gap-1.5">
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" />
+              <span
+                className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+                style={{ animationDelay: '0.15s' }}
+              />
+              <span
+                className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"
+                style={{ animationDelay: '0.3s' }}
+              />
+            </div>
+            <span className="text-xs text-slate-500 dark:text-dark-muted">typing...</span>
           </div>
-          <span className="text-slate-500 dark:text-dark-muted">typing...</span>
         </div>
       )}
 
-      {/* Attachment preview */}
-      {pendingAttachment && (
-        <div className="px-4 py-2 border-t border-slate-200 dark:border-dark-border">
-          <AttachmentPreview
-            attachment={pendingAttachment}
-            onRemove={() => setPendingAttachment(null)}
-          />
+      {/* Resolved conversation — read-only bar */}
+      {activeConversation?.supportStatus === 'resolved' ? (
+        <div className="px-4 py-3 bg-white dark:bg-dark-card shadow-[0_-1px_4px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_4px_rgba(0,0,0,0.2)]">
+          <div className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-dark-muted">
+            <CheckCircle className="w-4 h-4 text-green-500" />
+            <span>Conversation resolved</span>
+            {activeConversation.supportMetadata?.resolvedAt && (
+              <span className="text-xs text-slate-400">
+                · {new Date(activeConversation.supportMetadata.resolvedAt).toLocaleDateString()}
+              </span>
+            )}
+          </div>
         </div>
-      )}
-
-      {/* Input area */}
-      <div className="p-4 border-t border-slate-200 dark:border-dark-border">
-        <div className="flex items-center gap-2">
-          {/* Hide attachment button and input when recording or has pending voice note */}
-          {!isRecording && !hasPendingVoiceNote && (
-            <>
-              {/* Attachment button */}
-              <AttachmentButton
-                onAttachmentReady={setPendingAttachment}
-                disabled={isSending || !!pendingAttachment}
-              />
-
-              {/* Text input with mentions */}
-              <MentionInput
-                ref={inputRef}
-                value={inputValue}
-                onChange={(value, newMentions, _mentionsAll) => {
-                  setInputValue(value);
-                  setMentions(newMentions);
-                }}
-                mentionableUsers={mentionableUsers}
-                onKeyDown={handleKeyPress}
-                onTyping={handleTyping}
-                placeholder="Type a message..."
-                disabled={isSending}
-              />
-            </>
-          )}
-
-          {/* Voice recorder - always rendered to preserve state */}
-          {(isRecording || hasPendingVoiceNote || !canSend) && (
-            <div className={isRecording || hasPendingVoiceNote ? 'flex-1 min-w-0' : ''}>
-              <VoiceRecorder
-                onVoiceNoteReady={handleVoiceNoteReady}
-                onRecordingStateChange={setIsRecording}
-                onHasPendingVoiceNote={setHasPendingVoiceNote}
-                disabled={isSending}
+      ) : (
+        <>
+          {/* Attachment preview */}
+          {pendingAttachment && (
+            <div className="px-4 py-2 bg-white dark:bg-dark-card border-b border-slate-100 dark:border-dark-border">
+              <AttachmentPreview
+                attachment={pendingAttachment}
+                onRemove={() => setPendingAttachment(null)}
               />
             </div>
           )}
 
-          {/* Send button - only when there's content and not recording */}
-          {!isRecording && !hasPendingVoiceNote && canSend && (
-            <Button
-              onClick={handleSend}
-              disabled={isSending}
-              icon={<Send className="w-5 h-5" />}
-              className="!p-2 !rounded-full"
-            />
-          )}
-        </div>
-      </div>
+          {/* Input area */}
+          <div className="p-3 bg-white dark:bg-dark-card shadow-[0_-1px_4px_rgba(0,0,0,0.04)] dark:shadow-[0_-1px_4px_rgba(0,0,0,0.2)]">
+            <div className="flex items-center gap-2">
+              {/* Hide attachment button and input when recording or has pending voice note */}
+              {!isRecording && !hasPendingVoiceNote && (
+                <>
+                  {/* Attachment button */}
+                  <AttachmentButton
+                    onAttachmentReady={setPendingAttachment}
+                    disabled={isSending || !!pendingAttachment}
+                  />
+
+                  {/* Text input with mentions */}
+                  <MentionInput
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={(value, newMentions, _mentionsAll) => {
+                      setInputValue(value);
+                      setMentions(newMentions);
+                    }}
+                    mentionableUsers={mentionableUsers}
+                    onKeyDown={handleKeyPress}
+                    onTyping={handleTyping}
+                    placeholder="Type a message..."
+                    disabled={isSending}
+                  />
+                </>
+              )}
+
+              {/* Voice recorder - always rendered to preserve state */}
+              {(isRecording || hasPendingVoiceNote || !canSend) && (
+                <div className={isRecording || hasPendingVoiceNote ? 'flex-1 min-w-0' : ''}>
+                  <VoiceRecorder
+                    onVoiceNoteReady={handleVoiceNoteReady}
+                    onRecordingStateChange={setIsRecording}
+                    onHasPendingVoiceNote={setHasPendingVoiceNote}
+                    disabled={isSending}
+                  />
+                </div>
+              )}
+
+              {/* Send button - only when there's content and not recording */}
+              {!isRecording && !hasPendingVoiceNote && canSend && (
+                <Button
+                  onClick={handleSend}
+                  disabled={isSending}
+                  icon={<Send className="w-5 h-5" />}
+                  className="!p-2.5 !rounded-full"
+                />
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

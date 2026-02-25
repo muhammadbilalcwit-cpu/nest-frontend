@@ -240,3 +240,24 @@
     width: 0%;
   }
 }
+
+/* Enterprise chat animations */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-slide-up {
+  animation: fadeSlideUp 0.3s ease-out;
+}
+
+.chat-bg-pattern {
+  background-color: #f8fafc;
+  background-image: radial-gradient(circle, #e2e8f0 0.75px, transparent 0.75px);
+  background-size: 20px 20px;
+}
+
+.dark .chat-bg-pattern {
+  background-color: #0f172a;
+  background-image: radial-gradient(circle, #1e293b 0.75px, transparent 0.75px);
+}

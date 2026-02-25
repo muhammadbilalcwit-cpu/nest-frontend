@@ -93,6 +93,34 @@ export const subscribeToUserOffline = (
 };
 
 /**
+ * Subscribe to the full online user list
+ * FastAPI sends this on initial connection so the UI has accurate status from the start
+ */
+export const subscribeToOnlineList = (
+  callback: (data: { userIds: number[] }) => void
+): (() => void) => {
+  return subscribe('users:online_list', callback);
+};
+
+/**
+ * Subscribe to customer online status (for support agents)
+ */
+export const subscribeToCustomerOnline = (
+  callback: (data: { customerId: number; companyId: number }) => void
+): (() => void) => {
+  return subscribe('customer:online', callback);
+};
+
+/**
+ * Subscribe to customer offline status (for support agents)
+ */
+export const subscribeToCustomerOffline = (
+  callback: (data: { customerId: number; companyId: number }) => void
+): (() => void) => {
+  return subscribe('customer:offline', callback);
+};
+
+/**
  * Subscribe to message deleted events (when someone deletes for everyone)
  */
 export const subscribeToMessageDeleted = (
@@ -331,4 +359,25 @@ export const sendGroupTypingIndicator = (payload: GroupTypingPayload): void => {
  */
 export const markGroupMessagesAsRead = (groupId: string): void => {
   emit(EVENTS.GROUP_READ, { groupId });
+};
+
+// ============ Support Queue Subscriptions ============
+
+/**
+ * Subscribe to new support queue items
+ * Dispatches a window event so SupportQueueList can refresh
+ */
+export const subscribeToSupportQueueNew = (
+  callback: (data: any) => void
+): (() => void) => {
+  return subscribe('support:queue:new', callback);
+};
+
+/**
+ * Subscribe to support queue updates (accept, resolve)
+ */
+export const subscribeToSupportQueueUpdated = (
+  callback: (data: any) => void
+): (() => void) => {
+  return subscribe('support:queue:updated', callback);
 };

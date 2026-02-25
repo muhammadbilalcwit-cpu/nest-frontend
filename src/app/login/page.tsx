@@ -35,6 +35,33 @@ export default function LoginPage() {
     }
   }, []);
 
+  // Support chat widget — for testing (remove in production)
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'http://localhost:3100/widget.js';
+    script.dataset.companyId = '2';
+    script.dataset.title = 'Support Chat';
+    script.dataset.position = 'right';
+    document.body.appendChild(script);
+
+    return () => {
+      script.remove();
+      document.getElementById('support-widget-root')?.remove();
+
+      // Handle race condition: widget.js may load AFTER cleanup runs,
+      // creating #support-widget-root after we tried to remove it.
+      const observer = new MutationObserver(() => {
+        const root = document.getElementById('support-widget-root');
+        if (root) {
+          root.remove();
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true });
+      setTimeout(() => observer.disconnect(), 5000);
+    };
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');

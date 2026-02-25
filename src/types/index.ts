@@ -102,7 +102,7 @@ export interface PaginatedData<T> {
   meta: PaginationMeta;
 }
 
-export type RoleSlug = 'super_admin' | 'company_admin' | 'manager' | 'user';
+export type RoleSlug = 'super_admin' | 'company_admin' | 'manager' | 'user' | 'customer';
 
 // Session details for each active session
 export interface SessionDetails {
@@ -312,13 +312,20 @@ export interface ChatUser {
 export interface ChatConversation {
   _id: string;
   participants: number[];
+  isGroup?: boolean;
   lastMessage: string | null;
   lastMessageSenderId: number | null;
   lastMessageAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
   otherUser?: ChatUser;
   unreadCount?: number;
+  deletedFor?: number[];
+  // Support chat fields (present when conversation is a support chat)
+  isSupportChat?: boolean;
+  supportStatus?: 'waiting' | 'active' | 'resolved';
+  supportMetadata?: SupportMetadata;
+  customerInfo?: SupportCustomerInfo;
 }
 
 export type MessageStatus = 'sent' | 'delivered' | 'read';
@@ -362,6 +369,10 @@ export interface ChatMessage {
   deletedAt?: string | null;
   attachment?: MessageAttachment | null;
   mentions?: MessageMention[];
+  /** True when the message content is encrypted at rest on the server. */
+  isEncrypted?: boolean;
+  /** True when the message was sent by a customer (support chat role indicator). */
+  senderIsCustomer?: boolean;
 }
 
 export interface ChatMessageDeletedPayload {
@@ -373,6 +384,7 @@ export interface SendMessagePayload {
   tempId: string;
   recipientId: number;
   content: string;
+  conversationId?: string;
   attachment?: MessageAttachment;
   mentions?: MessageMention[];
 }
@@ -380,6 +392,7 @@ export interface SendMessagePayload {
 export interface TypingPayload {
   recipientId: number;
   isTyping: boolean;
+  isSupportChat?: boolean;
 }
 
 export interface ChatMessageReceived {
@@ -480,6 +493,8 @@ export interface GroupMessage {
   // Mentions fields
   mentions?: MessageMention[];
   mentionsAll?: boolean;
+  /** True when the message content is encrypted at rest on the server. */
+  isEncrypted?: boolean;
 }
 
 export interface CreateGroupPayload {
@@ -590,4 +605,75 @@ export interface GroupMessageInfo {
 export interface GroupSystemMessagePayload {
   groupId: string;
   message: GroupMessage;
+}
+
+// —————————————————————————————————————————————
+// Support Queue Types (Customer <-> Agent)
+// —————————————————————————————————————————————
+
+export interface SupportCustomerInfo {
+  customerId: number;
+  email: string;
+  name: string;
+  phone: string | null;
+  location: string | null;
+  isOnline: boolean;
+}
+
+export interface SupportMetadata {
+  customerId: number;
+  companyId: number;
+  preferredAgentId?: number | null;
+  source: string;
+  waitingSince?: string | null;
+  acceptedAt?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface SupportQueueConversation {
+  _id: string;
+  participants: number[];
+  isGroup: boolean;
+  isSupportChat: boolean;
+  supportStatus: 'waiting' | 'active' | 'resolved';
+  supportMetadata: SupportMetadata;
+  lastMessage?: string | null;
+  lastMessageSenderId?: number | null;
+  lastMessageAt?: string | null;
+  customerInfo?: SupportCustomerInfo | null;
+  unreadCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UnifiedSupportQueueResponse {
+  items: SupportQueueConversation[];
+  total: number;
+  statusCounts: { waiting: number; active: number; resolved: number };
+  unreadCounts?: { waiting: number; active: number; resolved: number };
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface CustomerHistoryConversation {
+  _id: string;
+  supportStatus: string;
+  messageCount: number;
+  createdAt?: string;
+  supportMetadata?: SupportMetadata;
+}
+
+export interface CustomerHistoryResponse {
+  customer: {
+    customerId: number;
+    email: string;
+    name: string;
+    phone: string | null;
+  };
+  items: CustomerHistoryConversation[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
 }

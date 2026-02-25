@@ -17,7 +17,9 @@ export function ChatToggleButton() {
     return groups.reduce((sum, group) => sum + (group.unreadCount || 0), 0);
   }, [groups]);
 
-  const unreadCount = directUnreadCount + groupUnreadCount;
+  const supportWaitingCount = useChatStore((s) => s.supportWaitingCount);
+  const supportUnreadCount = useChatStore((s) => s.supportUnreadCount);
+  const unreadCount = directUnreadCount + groupUnreadCount + supportWaitingCount + supportUnreadCount;
 
   const hasRole = useAuthStore((s) => s.hasRole);
   const chatAccessRoles = useChatStore((s) => s.chatConfig.chatAccessRoles);
