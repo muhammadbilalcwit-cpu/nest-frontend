@@ -126,6 +126,58 @@ npm run dev -- -p 3001
 | `npm start` | Production server |
 | `npm run lint` | ESLint |
 
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_API_URL` | NestJS core API URL | `http://localhost:3000` |
+| `NEXT_PUBLIC_SOCKET_URL` | NestJS WebSocket URL | `http://localhost:3001` |
+| `NEXT_PUBLIC_CHAT_API_URL` | FastAPI chat backend URL | `http://localhost:8006` |
+| `NEXT_PUBLIC_CHAT_SOCKET_URL` | FastAPI chat WebSocket URL | `http://localhost:8006` |
+
+### Development
+
+Create `.env.local` in the project root:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_SOCKET_URL=http://localhost:3001
+NEXT_PUBLIC_CHAT_API_URL=http://localhost:8006
+NEXT_PUBLIC_CHAT_SOCKET_URL=http://localhost:8006
+```
+
+### Production Deployment
+
+`NEXT_PUBLIC_` variables are **baked into the JavaScript bundle at build time** — they are not read at runtime. You must set them **before** running `npm run build`.
+
+**Option A — .env.local file on the server:**
+
+```bash
+cat > .env.local << 'EOF'
+NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+NEXT_PUBLIC_SOCKET_URL=https://api.yourdomain.com
+NEXT_PUBLIC_CHAT_API_URL=https://chat-api.yourdomain.com
+NEXT_PUBLIC_CHAT_SOCKET_URL=https://chat-api.yourdomain.com
+EOF
+
+npm run build
+npm start
+```
+
+**Option B — System environment variables:**
+
+```bash
+export NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+export NEXT_PUBLIC_SOCKET_URL=https://api.yourdomain.com
+export NEXT_PUBLIC_CHAT_API_URL=https://chat-api.yourdomain.com
+export NEXT_PUBLIC_CHAT_SOCKET_URL=https://chat-api.yourdomain.com
+
+npm run build
+npm start
+```
+
+> **Important:** If you change any `NEXT_PUBLIC_` variable, you must **rebuild** (`npm run build`) for the change to take effect.
+
 ## Related Projects
 
 | Project | Purpose |
